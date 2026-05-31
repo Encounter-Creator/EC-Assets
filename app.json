@@ -1,11 +1,12 @@
 {
   "expo": {
-    "name": "temp-assets-expo",
-    "slug": "temp-assets-expo",
+    "name": "Assets App",
+    "slug": "ec-asset",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "scheme": "assetsapp",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true
     },
@@ -20,6 +21,18 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "9d29bb3a-56c2-440b-8165-354b270ca275"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      "expo-splash-screen"
+    ],
+    "owner": "barends-organization"
   }
 }
