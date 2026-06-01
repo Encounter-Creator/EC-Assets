@@ -13,7 +13,7 @@ export default function DashboardScreen() {
   return (
     <Screen
       title="Dashboard"
-      subtitle={`${user?.fullName} • ${user?.role.replace("_", " ")} • ${user?.homeBase}`}
+      subtitle={`${user?.fullName} / ${user?.role.replace("_", " ")} / ${user?.homeBase}`}
       right={
         <Pressable onPress={() => void signOut()}>
           <Text style={{ color: "#92dfac", fontWeight: "700" }}>Sign Out</Text>

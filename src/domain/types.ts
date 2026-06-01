@@ -104,3 +104,17 @@ export type AppSnapshot = {
   myAssets: Record<MyAssetsTabKey, RequestQueueRow[]>;
   notifications: NotificationRecord[];
 };
+
+export type OperatorProfile = {
+  id: string;
+  fullName: string;
+  email: string;
+  role: AppRole;
+  homeBase: string;
+  department?: string | null;
+};
+
+export type LocationOption = {
+  id: string;
+  name: string;
+};

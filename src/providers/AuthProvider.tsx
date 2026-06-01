@@ -1,4 +1,5 @@
 import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useState } from "react";
+import { AppState } from "react-native";
 import { z } from "zod";
 
 import { DEFAULT_ROLE } from "../domain/mockData";
@@ -15,7 +16,8 @@ type AuthState = {
   signIn: (email: string, password: string) => Promise<{ ok: boolean; message?: string }>;
   signUp: (payload: { fullName: string; surname: string; email: string; password: string }) => Promise<{ ok: boolean; pendingApproval: boolean; message?: string }>;
   signOut: () => Promise<void>;
-  completeDamageForm: () => void;
+  completeDamageForm: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -47,7 +49,7 @@ function mockUser(email: string, approved = true): UserProfile {
   };
 }
 
-async function resolveUserProfile(email: string, approvedFallback = true): Promise<UserProfile> {
+async function resolveUserProfile(email: string, approvedFallback = true, sessionUserId?: string): Promise<UserProfile> {
   const fallback = mockUser(email, approvedFallback);
 
   if (!isSupabaseEnabled) {
@@ -60,7 +62,7 @@ async function resolveUserProfile(email: string, approvedFallback = true): Promi
   }
 
   return {
-    id: email,
+    id: access.id ?? sessionUserId ?? email,
     email: access.email || email,
     fullName: access.full_name || fallback.fullName,
     role: access.role,
@@ -75,15 +77,89 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<UserProfile | null>(null);
 
+  const applyUser = async (nextUser: UserProfile | null) => {
+    setUser(nextUser);
+    if (nextUser) {
+      await setItem(STORAGE_KEY, JSON.stringify(nextUser));
+      return;
+    }
+    await deleteItem(STORAGE_KEY);
+  };
+
+  const refreshUser = async () => {
+    if (!isSupabaseEnabled || !supabase) {
+      return;
+    }
+
+    const { data } = await supabase.auth.getUser();
+    const sessionUser = data.user;
+
+    if (!sessionUser?.email) {
+      await applyUser(null);
+      return;
+    }
+
+    const nextUser = await resolveUserProfile(sessionUser.email, true, sessionUser.id);
+    await applyUser(nextUser);
+  };
+
   useEffect(() => {
     getItem(STORAGE_KEY)
-      .then((raw) => {
+      .then(async (raw) => {
         if (raw) {
           setUser(JSON.parse(raw) as UserProfile);
+        }
+
+        if (isSupabaseEnabled && supabase) {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+
+          if (session?.user?.email) {
+            const nextUser = await resolveUserProfile(session.user.email, true, session.user.id);
+            await applyUser(nextUser);
+          }
         }
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!isSupabaseEnabled || !supabase) {
+      return;
+    }
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user?.email) {
+        void applyUser(null);
+        return;
+      }
+
+      void resolveUserProfile(session.user.email, true, session.user.id).then((nextUser) => applyUser(nextUser));
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseEnabled || !supabase || !user) {
+      return;
+    }
+
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        void refreshUser().catch(() => null);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [user]);
 
   const signIn: AuthState["signIn"] = async (email, password) => {
     const parsed = loginSchema.safeParse({ email, password });
@@ -98,9 +174,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
     }
 
-    const nextUser = await resolveUserProfile(parsed.data.email, true);
-    setUser(nextUser);
-    await setItem(STORAGE_KEY, JSON.stringify(nextUser));
+    const { data } = await supabase?.auth.getUser() ?? { data: { user: null } };
+    const nextUser = await resolveUserProfile(parsed.data.email, true, data.user?.id);
+    await applyUser(nextUser);
     return { ok: true };
   };
 
@@ -131,8 +207,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       ...(await resolveUserProfile(parsed.data.email, false)),
       fullName: `${fullName.trim()} ${surname.trim()}`,
     };
-    setUser(nextUser);
-    await setItem(STORAGE_KEY, JSON.stringify(nextUser));
+    await applyUser(nextUser);
     return { ok: true, pendingApproval: true };
   };
 
@@ -140,12 +215,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (isSupabaseEnabled && supabase) {
       await supabase.auth.signOut();
     }
-    setUser(null);
-    await deleteItem(STORAGE_KEY);
+    await applyUser(null);
   };
 
-  const completeDamageForm = () => {
-    setUser((current) => (current ? { ...current, locked: false } : current));
+  const completeDamageForm = async () => {
+    if (isSupabaseEnabled && supabase) {
+      await refreshUser();
+      return;
+    }
+
+    setUser((current) => {
+      const next = current ? { ...current, locked: false } : current;
+      if (next) {
+        void setItem(STORAGE_KEY, JSON.stringify(next));
+      }
+      return next;
+    });
   };
 
   const value = useMemo(
@@ -156,6 +241,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       signUp,
       signOut,
       completeDamageForm,
+      refreshUser,
     }),
     [loading, user],
   );

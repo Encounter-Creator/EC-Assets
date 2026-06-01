@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { ApprovalsTabKey } from "../../src/domain/types";
 import { Panel } from "../../src/components/Cards";
 import { QueueList } from "../../src/components/Lists";
 import { RoleGate } from "../../src/components/RoleGate";
 import { Screen } from "../../src/components/Screen";
+import { ApprovalsTabKey } from "../../src/domain/types";
 import { useLiveApprovals } from "../../src/hooks/useLiveApprovals";
 import { useSnapshot } from "../../src/hooks/useSnapshot";
 import { isSupabaseEnabled } from "../../src/lib/supabase";
@@ -30,7 +30,7 @@ export default function ApprovalsScreen() {
       return (damageCases.data ?? []).map((item) => ({
         id: item.id,
         title: `Damage case ${item.asset_id.slice(0, 8)}`,
-        subtitle: `${item.status} • ${item.user_statement ?? "Awaiting user form or resolution"}`,
+        subtitle: `${item.status} / ${item.user_statement ?? "Awaiting user form or resolution"}`,
         status: item.status,
       }));
     }
@@ -47,7 +47,7 @@ export default function ApprovalsScreen() {
       .map((item) => ({
         id: item.id,
         title: `${item.approval_type.replace(/_/g, " ")} approval`,
-        subtitle: `${item.status} • ${item.review_notes ?? "Pending review"}`,
+        subtitle: `${item.status} / ${item.review_notes ?? "Pending review"}`,
         status: item.status,
       }));
   }, [approvals.data, damageCases.data, snapshot.approvals, tab]);

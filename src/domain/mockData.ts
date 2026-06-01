@@ -1,4 +1,4 @@
-import { AppSnapshot, AppRole, ApprovalStatus, AssetState, MyAssetsTabKey, RequestsTabKey } from "./types";
+import { AppSnapshot, AppRole, ApprovalStatus, AssetState, LocationOption, MyAssetsTabKey, OperatorProfile, RequestsTabKey } from "./types";
 
 const rows = (prefix: string, status: string, count = 3) =>
   Array.from({ length: count }, (_, index) => ({
@@ -107,6 +107,41 @@ export const MOCK_SNAPSHOT: AppSnapshot = {
 
 export const REQUESTS_TABS: RequestsTabKey[] = ["Asset", "Special", "Returns", "History"];
 export const MY_ASSETS_TABS: MyAssetsTabKey[] = ["Assigned", "Pending", "Damage"];
+
+export const MOCK_STANDARD_RECIPIENTS: OperatorProfile[] = [
+  {
+    id: "user-1",
+    fullName: "Lebo Mokoena",
+    email: "lebo@example.com",
+    role: "staff",
+    homeBase: "Centurion",
+    department: "Production",
+  },
+  {
+    id: "user-2",
+    fullName: "Anele Dlamini",
+    email: "anele@example.com",
+    role: "volunteer",
+    homeBase: "Lanseria",
+    department: "Audio",
+  },
+  {
+    id: "user-3",
+    fullName: "Thato Nene",
+    email: "thato@example.com",
+    role: "staff",
+    homeBase: "Krugersdorp",
+    department: "Lighting",
+  },
+];
+
+export const MOCK_STANDARD_LOCATIONS: LocationOption[] = [
+  { id: "loc-centurion", name: "Centurion" },
+  { id: "loc-krugersdorp", name: "Krugersdorp" },
+  { id: "loc-lanseria", name: "Lanseria" },
+  { id: "loc-office", name: "Office" },
+  { id: "loc-unassigned", name: "Unassigned" },
+];
 
 export const ASSET_STATUS_COLORS: Record<AssetState, string> = {
   Available: "#22c55e",

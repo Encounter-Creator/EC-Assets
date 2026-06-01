@@ -65,7 +65,7 @@ export default function LoginScreen() {
         <TextInput placeholder="Email address" placeholderTextColor="#6f8b79" value={email} onChangeText={setEmail} autoCapitalize="none" style={styles.input} />
         <TextInput placeholder="Password" placeholderTextColor="#6f8b79" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Pressable onPress={() => void onSubmit()} style={styles.primary}>
+        <Pressable onPress={() => void onSubmit()} style={[styles.primary, busy && styles.primaryDisabled]} disabled={busy}>
           <Text style={styles.primaryText}>{busy ? "Working..." : mode === "signin" ? "Sign In" : "Create Account"}</Text>
         </Pressable>
         <Pressable onPress={() => setMode(mode === "signin" ? "signup" : "signin")}>
@@ -88,6 +88,7 @@ const styles = StyleSheet.create({
   input: { borderRadius: 16, borderWidth: 1, borderColor: "#163323", backgroundColor: "#08150f", color: "#f6fff9", paddingHorizontal: 14, paddingVertical: 14 },
   error: { color: "#fda4af", fontWeight: "700" },
   primary: { borderRadius: 16, backgroundColor: "#24c05a", paddingVertical: 14, alignItems: "center" },
+  primaryDisabled: { opacity: 0.7 },
   primaryText: { color: "#03110b", fontWeight: "900" },
   secondaryText: { color: "#92dfac", textAlign: "center", fontWeight: "700" },
 });

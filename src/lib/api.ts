@@ -2,6 +2,7 @@ import { NotificationCategory, UserProfile } from "../domain/types";
 import { isSupabaseEnabled, supabase } from "./supabase";
 
 export type AccessContext = {
+  id?: string;
   approved: boolean;
   locked: boolean;
   role: UserProfile["role"];
@@ -60,6 +61,121 @@ export type DamageCaseRecord = {
   resolved_state: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type StandardAssetRecord = {
+  id: string;
+  tag: string;
+  name: string;
+  serial_number: string;
+  state: string;
+  current_location: string | null;
+  holder: string | null;
+  department: string | null;
+};
+
+export type StandardRecipientRecord = {
+  id: string;
+  full_name: string;
+  email: string;
+  role: UserProfile["role"];
+  home_base: string | null;
+  department: string | null;
+};
+
+export type StandardLocationRecord = {
+  id: string;
+  name: string;
+};
+
+export type InventoryAssetRecord = {
+  id: string;
+  tag: string;
+  name: string;
+  serial_number: string;
+  item_type: string;
+  state: string;
+  current_location: string | null;
+  holder: string | null;
+  department: string | null;
+  condition_note: string | null;
+};
+
+export type AssetHistoryRecord = {
+  id: string;
+  asset_id: string;
+  action: string;
+  notes: string | null;
+  performed_by: string | null;
+  created_at: string;
+};
+
+export type SettingsUserRecord = {
+  id: string;
+  full_name: string;
+  email: string;
+  role: UserProfile["role"];
+  home_base: string | null;
+  department: string | null;
+  approved: boolean;
+  locked: boolean;
+};
+
+export type SettingsLocationRecord = {
+  id: string;
+  name: string;
+  active: boolean;
+  is_home_base: boolean;
+};
+
+export type SettingsDepartmentRecord = {
+  id: string;
+  name: string;
+  active: boolean;
+};
+
+export type SettingsKitRecord = {
+  id: string;
+  name: string;
+  home_base: string | null;
+  active: boolean;
+  item_count: number;
+};
+
+export type SettingsConsumableRecord = {
+  id: string;
+  name: string;
+  department: string | null;
+  unit: string;
+  stock_on_hand: number;
+  reorder_level: number;
+  active: boolean;
+};
+
+export type SettingsDuplicateRecord = {
+  id: string;
+  primary_asset: string;
+  duplicate_asset: string;
+  status: string;
+  notes: string | null;
+  created_at: string;
+};
+
+export type SettingsConfigRecord = {
+  key: string;
+  value: Record<string, unknown>;
+  description: string | null;
+  updated_at: string;
+};
+
+export type ReturnRequestMonitorRecord = {
+  id: string;
+  request_id: string | null;
+  preferred_return_location: string | null;
+  status: string;
+  note: string | null;
+  created_at: string;
+  workflow_status: string | null;
 };
 
 export async function getMyAccessContext(): Promise<AccessContext | null> {
@@ -213,6 +329,28 @@ export async function reviewApproval(approvalId: string, status: "Approved" | "D
   return data as ApprovalRecord;
 }
 
+export async function recipientReviewAssignments(input: {
+  approvalIds: string[];
+  decision: "Approved" | "Declined";
+  reason?: string;
+}) {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("recipient_review_assignments", {
+    p_approval_ids: input.approvalIds,
+    p_decision: input.decision,
+    p_reason: input.reason ?? null,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as ApprovalRecord[] | null) ?? [];
+}
+
 export async function listDamageCases(): Promise<DamageCaseRecord[]> {
   if (!isSupabaseEnabled || !supabase) {
     return [];
@@ -295,4 +433,260 @@ export async function resolveDamageCase(caseId: string, resolvedState: "Availabl
   }
 
   return data;
+}
+
+export async function listStandardSignOutAssets(): Promise<StandardAssetRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_standard_sign_out_assets");
+  if (error) {
+    throw error;
+  }
+
+  return (data as StandardAssetRecord[] | null) ?? [];
+}
+
+export async function listStandardSignInAssets(): Promise<StandardAssetRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_standard_sign_in_assets");
+  if (error) {
+    throw error;
+  }
+
+  return (data as StandardAssetRecord[] | null) ?? [];
+}
+
+export async function listStandardRecipients(): Promise<StandardRecipientRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_standard_recipients");
+  if (error) {
+    throw error;
+  }
+
+  return (data as StandardRecipientRecord[] | null) ?? [];
+}
+
+export async function listStandardLocations(): Promise<StandardLocationRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_standard_locations");
+  if (error) {
+    throw error;
+  }
+
+  return (data as StandardLocationRecord[] | null) ?? [];
+}
+
+export async function listMyAssignedAssets(): Promise<StandardAssetRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_my_assigned_assets");
+  if (error) {
+    throw error;
+  }
+
+  return (data as StandardAssetRecord[] | null) ?? [];
+}
+
+export async function listInventoryAssets(): Promise<InventoryAssetRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_inventory_assets");
+  if (error) {
+    throw error;
+  }
+
+  return (data as InventoryAssetRecord[] | null) ?? [];
+}
+
+export async function getAssetDetail(assetId: string): Promise<InventoryAssetRecord | null> {
+  if (!isSupabaseEnabled || !supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase.rpc("get_asset_detail", {
+    p_asset_id: assetId,
+  });
+  if (error) {
+    throw error;
+  }
+
+  return (data as InventoryAssetRecord | null) ?? null;
+}
+
+export async function listAssetHistory(assetId: string): Promise<AssetHistoryRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_asset_history", {
+    p_asset_id: assetId,
+  });
+  if (error) {
+    throw error;
+  }
+
+  return (data as AssetHistoryRecord[] | null) ?? [];
+}
+
+export async function listSettingsUsers(): Promise<SettingsUserRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_settings_users");
+  if (error) {
+    throw error;
+  }
+
+  return (data as SettingsUserRecord[] | null) ?? [];
+}
+
+export async function listSettingsLocations(): Promise<SettingsLocationRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_settings_locations");
+  if (error) {
+    throw error;
+  }
+
+  return (data as SettingsLocationRecord[] | null) ?? [];
+}
+
+export async function listSettingsDepartments(): Promise<SettingsDepartmentRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_settings_departments");
+  if (error) {
+    throw error;
+  }
+
+  return (data as SettingsDepartmentRecord[] | null) ?? [];
+}
+
+export async function listSettingsKits(): Promise<SettingsKitRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_settings_kits");
+  if (error) {
+    throw error;
+  }
+
+  return (data as SettingsKitRecord[] | null) ?? [];
+}
+
+export async function listSettingsConsumables(): Promise<SettingsConsumableRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_settings_consumables");
+  if (error) {
+    throw error;
+  }
+
+  return (data as SettingsConsumableRecord[] | null) ?? [];
+}
+
+export async function listSettingsDuplicates(): Promise<SettingsDuplicateRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_settings_duplicates");
+  if (error) {
+    throw error;
+  }
+
+  return (data as SettingsDuplicateRecord[] | null) ?? [];
+}
+
+export async function listSettingsConfig(): Promise<SettingsConfigRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_settings_config");
+  if (error) {
+    throw error;
+  }
+
+  return (data as SettingsConfigRecord[] | null) ?? [];
+}
+
+export async function listReturnRequestMonitor(): Promise<ReturnRequestMonitorRecord[]> {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("list_return_request_monitor");
+  if (error) {
+    throw error;
+  }
+
+  return (data as ReturnRequestMonitorRecord[] | null) ?? [];
+}
+
+export async function standardSignOutAssets(input: {
+  assetIds: string[];
+  holderId: string;
+  note?: string;
+}) {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("standard_sign_out_assets", {
+    p_asset_ids: input.assetIds,
+    p_holder_id: input.holderId,
+    p_note: input.note ?? null,
+  });
+  if (error) {
+    throw error;
+  }
+
+  return (data as StandardAssetRecord[] | null) ?? [];
+}
+
+export async function standardSignInAssets(input: {
+  assetIds: string[];
+  finalLocationId: string;
+  outcome: "Available" | "Damaged";
+  note?: string;
+}) {
+  if (!isSupabaseEnabled || !supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("standard_sign_in_assets", {
+    p_asset_ids: input.assetIds,
+    p_final_location_id: input.finalLocationId,
+    p_outcome: input.outcome,
+    p_note: input.note ?? null,
+  });
+  if (error) {
+    throw error;
+  }
+
+  return (data as StandardAssetRecord[] | null) ?? [];
 }

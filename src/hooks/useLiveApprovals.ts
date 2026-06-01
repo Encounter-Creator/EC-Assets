@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listApprovals, listDamageCases, reviewApproval, resolveDamageCase } from "../lib/api";
 import { isSupabaseEnabled } from "../lib/supabase";
 
+const ACTIVE_DAMAGE_STATUSES = new Set(["Locked", "Form Pending", "Form Submitted", "Under Review"]);
+
 export function useLiveApprovals() {
   const queryClient = useQueryClient();
 
@@ -16,6 +18,7 @@ export function useLiveApprovals() {
     queryKey: ["damage-cases"],
     queryFn: listDamageCases,
     enabled: isSupabaseEnabled,
+    select: (items) => items.filter((item) => ACTIVE_DAMAGE_STATUSES.has(item.status)),
   });
 
   const approvalReview = useMutation({
@@ -46,6 +49,9 @@ export function useLiveApprovals() {
     }) => resolveDamageCase(caseId, resolvedState, conditionNote),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["damage-cases"] });
+      void queryClient.invalidateQueries({ queryKey: ["check-standard-sign-out-assets"] });
+      void queryClient.invalidateQueries({ queryKey: ["check-standard-sign-in-assets"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 
