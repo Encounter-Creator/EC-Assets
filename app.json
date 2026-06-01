@@ -8,9 +8,11 @@
     "scheme": "assetsapp",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.encountercreator.ecasset"
     },
     "android": {
+      "package": "com.encountercreator.ecasset",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
