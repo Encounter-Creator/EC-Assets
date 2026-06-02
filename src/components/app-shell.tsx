@@ -1,0 +1,282 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Bell, ChevronRight, ClipboardList, LayoutGrid, LogOut, MapPin, Menu, Package, Repeat, ScanLine, Settings, ShieldCheck, UserSquare2, X } from "lucide-react";
+import { useState } from "react";
+
+import { useAuth } from "@/contexts/auth-context";
+import { useLocationScope } from "@/contexts/location-scope-context";
+import { getPrimaryRoleLabel, type AppRole } from "@/lib/auth";
+import { cn } from "@/lib/utils";
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  show: (roles: AppRole[]) => boolean;
+};
+
+const navItems: NavItem[] = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid, show: () => true },
+  { href: "/inventory", label: "Inventory", icon: Package, show: (roles) => roles.includes("admin") || roles.includes("main_admin") || roles.includes("asset_manager") || roles.includes("staff") },
+  { href: "/check-out-in", label: "Check-out/In", icon: ScanLine, show: (roles) => roles.includes("admin") || roles.includes("main_admin") || roles.includes("asset_manager") },
+  { href: "/my-assets", label: "My Assets", icon: UserSquare2, show: () => true },
+  { href: "/requests", label: "Requests", icon: ClipboardList, show: (roles) => roles.includes("admin") || roles.includes("main_admin") || roles.includes("staff") },
+  { href: "/approvals", label: "Approvals", icon: ShieldCheck, show: (roles) => roles.includes("admin") || roles.includes("main_admin") || roles.includes("asset_manager") },
+  { href: "/settings", label: "Settings", icon: Settings, show: () => true },
+] as const;
+
+export function AppShell({
+  children,
+  title,
+  kicker,
+}: {
+  children: React.ReactNode;
+  title: string;
+  kicker: string;
+}) {
+  const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const { profileName, roles, signOut } = useAuth();
+  const { locations, selectedLocationId, selectedLocationName, setSelectedLocationId } = useLocationScope();
+  const visibleNavItems = navItems.filter((item) => item.show(roles));
+  const mobilePrimaryNav = visibleNavItems.slice(0, 4);
+  const roleLabel = getPrimaryRoleLabel(roles);
+
+  return (
+    <div className="app-mobile-shell relative flex min-h-screen text-foreground">
+      <aside className="sticky top-4 ml-4 mr-3 mt-4 hidden h-[calc(100dvh-2rem)] w-[260px] shrink-0 md:flex">
+        <Sidebar pathname={pathname} navItems={visibleNavItems} />
+      </aside>
+
+      {mobileOpen && (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close navigation overlay"
+          />
+          <aside className="fixed inset-y-0 right-0 z-50 w-80 max-w-[88vw] border-l border-primary/12 bg-[hsl(var(--sidebar-background))] p-4 shadow-[var(--shadow-strong)] md:hidden">
+            <div className="mb-4 flex items-center justify-between">
+              <Brand />
+              <button
+                type="button"
+                onClick={() => setMobileOpen(false)}
+                className="rounded-full border border-primary/18 bg-card/70 p-2 text-muted-foreground"
+                aria-label="Close navigation"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <Sidebar pathname={pathname} navItems={visibleNavItems} mobile onNavigate={() => setMobileOpen(false)} />
+          </aside>
+        </>
+      )}
+
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pt-[var(--app-safe-top)]">
+        <header className="sticky top-0 z-30 px-3 py-3 sm:px-6 sm:py-4">
+          <div className="flex items-center justify-between gap-3 rounded-[1.75rem] border border-primary/14 bg-background/92 px-4 py-3 shadow-[var(--shadow-soft)] backdrop-blur-xl">
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setMobileOpen(true)}
+                className="rounded-full border border-primary/18 bg-card/70 p-2 text-muted-foreground md:hidden"
+                aria-label="Open navigation"
+              >
+                <Menu size={18} />
+              </button>
+              <Image src="/icon-512.png" alt="Assets" width={36} height={36} className="size-9 shrink-0 object-contain" priority />
+              <div className="min-w-0">
+                <div className="truncate font-mono text-[11px] uppercase tracking-[0.22em] text-primary/72">{kicker}</div>
+                <div className="truncate font-display text-xl text-foreground glow-soft">{title}</div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="hidden items-center gap-2 rounded-full border border-sky-400/30 bg-sky-500/10 px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-300 lg:inline-flex">
+                <MapPin size={14} className="opacity-80" />
+                <span>{selectedLocationName}</span>
+              </div>
+              <button type="button" className="rounded-full border border-primary/18 bg-card/70 p-2 text-muted-foreground">
+                <Bell size={16} />
+              </button>
+              <div className="hidden items-center gap-2 rounded-full border border-primary/18 bg-card/70 px-4 py-2 md:inline-flex">
+                <span className="text-sm">{profileName || "Operator"}</span>
+                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary/70">{roleLabel}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="hidden items-center gap-2 rounded-full border border-destructive/25 bg-card/70 px-4 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10 md:inline-flex"
+              >
+                <LogOut size={14} />
+                Logout
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <main className="min-w-0 flex-1 px-3 pb-[calc(var(--app-mobile-nav-height)+1rem)] sm:px-6 sm:pb-8">
+          <div className="mx-auto w-full max-w-7xl">{children}</div>
+        </main>
+
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-primary/12 bg-background/96 px-2 pb-[var(--app-safe-bottom)] pt-2 shadow-[0_-14px_34px_rgba(0,0,0,0.28)] backdrop-blur-xl md:hidden">
+          <div className="mx-auto grid max-w-md grid-cols-5 gap-1 pb-1">
+            {mobilePrimaryNav.map((item) => {
+              const active = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex min-h-[4rem] flex-col items-center justify-center gap-1 rounded-xl px-1 pb-1.5 pt-2 text-[10px] font-semibold transition-colors",
+                    active ? "bg-primary/14 text-primary" : "text-muted-foreground hover:bg-primary/8 hover:text-foreground",
+                  )}
+                >
+                  <item.icon size={17} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+            {visibleNavItems.length > 4 ? (
+              <button
+                type="button"
+                onClick={() => setMobileOpen(true)}
+                className="flex min-h-[4rem] flex-col items-center justify-center gap-1 rounded-xl px-1 pb-1.5 pt-2 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-primary/8 hover:text-foreground"
+              >
+                <ChevronRight size={17} />
+                <span>More</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSelectedLocationId(selectedLocationId === "all" ? locations[0]?.id ?? "all" : "all")}
+                className="flex min-h-[4rem] flex-col items-center justify-center gap-1 rounded-xl px-1 pb-1.5 pt-2 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-primary/8 hover:text-foreground"
+              >
+                <MapPin size={17} />
+                <span>Scope</span>
+              </button>
+            )}
+          </div>
+        </nav>
+      </div>
+    </div>
+  );
+}
+
+function Sidebar({
+  pathname,
+  navItems,
+  mobile = false,
+  onNavigate,
+}: {
+  pathname: string;
+  navItems: NavItem[];
+  mobile?: boolean;
+  onNavigate?: () => void;
+}) {
+  const { signOut } = useAuth();
+  const { canSelectAllLocations, isLocationLocked, locations, selectedLocationId, selectedLocationName, setSelectedLocationId } = useLocationScope();
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col rounded-[1.8rem] border border-primary/16 bg-card/60 text-sidebar-foreground shadow-[var(--shadow-soft)] backdrop-blur-sm">
+      <div className="border-b border-primary/12 p-4">
+        <Brand />
+      </div>
+      <nav className="flex-1 space-y-2 p-3">
+        {navItems.map((item) => {
+          const active = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavigate}
+              className={cn(
+                "group flex items-center gap-3 rounded-[1.2rem] border px-4 py-3 text-sm font-medium transition-colors",
+                active
+                  ? "border-primary/20 bg-primary/12 text-primary shadow-[0_0_24px_hsl(var(--primary)/0.1)]"
+                  : "border-transparent text-muted-foreground hover:bg-primary/6 hover:text-foreground",
+              )}
+            >
+              <item.icon size={16} className="shrink-0" />
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+      {!mobile && (
+        <div className="px-3 pb-3">
+          <div className="rounded-[1.2rem] border border-primary/18 bg-background/50 px-4 py-3">
+            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Scope</div>
+            <div className="mt-2 text-sm text-foreground">All locations</div>
+            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+              <Repeat size={12} />
+              Baseline rebuild shell
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="px-3 pb-3">
+        <div className="rounded-[1.2rem] border border-primary/18 bg-background/50 px-4 py-3">
+          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Location scope</div>
+          <div className="mt-2 text-sm text-foreground">{selectedLocationName}</div>
+          {canSelectAllLocations && locations.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedLocationId("all")}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
+                  selectedLocationId === "all" ? "border-primary/30 bg-primary/12 text-primary" : "border-primary/12 text-muted-foreground hover:text-foreground",
+                )}
+              >
+                All
+              </button>
+              {locations.slice(0, 3).map((location) => (
+                <button
+                  key={location.id}
+                  type="button"
+                  onClick={() => setSelectedLocationId(location.id)}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
+                    selectedLocationId === location.id ? "border-primary/30 bg-primary/12 text-primary" : "border-primary/12 text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {location.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {isLocationLocked && (
+            <div className="mt-2 text-xs text-muted-foreground">Locked to assigned location by role.</div>
+          )}
+        </div>
+      </div>
+      <div className="px-3 pb-3">
+        <button
+          type="button"
+          onClick={() => void signOut()}
+          className="flex w-full items-center gap-3 rounded-[1.2rem] border border-destructive/20 bg-destructive/8 px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/12"
+        >
+          <LogOut size={16} />
+          <span>Log out</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Brand() {
+  return (
+    <div className="flex items-center gap-3">
+      <Image src="/icon-512.png" alt="Assets" width={44} height={44} className="size-11 shrink-0 object-contain" priority />
+      <div className="min-w-0">
+        <div className="font-display text-2xl uppercase tracking-[0.2em] text-primary glow">Assets</div>
+        <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-primary/70">Encounter Church</div>
+      </div>
+    </div>
+  );
+}
