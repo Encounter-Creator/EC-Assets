@@ -62,7 +62,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [assetManagerLocationId, setAssetManagerLocationId] = useState<string | null>(null);
   const [assignedLocationId, setAssignedLocationId] = useState<string | null>(null);
   const [damageLockCase, setDamageLockCase] = useState<DamageLockCase | null>(null);
+  const userEmailRef = useRef<string | null>(null);
+  const accessStateRef = useRef<AccessState>(isConfigured ? "loading" : "unconfigured");
+  const rolesRef = useRef<AppRole[]>([]);
   const lastResolvedUserIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    userEmailRef.current = user?.email ?? null;
+  }, [user]);
+
+  useEffect(() => {
+    accessStateRef.current = accessState;
+  }, [accessState]);
+
+  useEffect(() => {
+    rolesRef.current = roles;
+  }, [roles]);
 
   const clearAccessState = useCallback(() => {
     setRoles([]);
@@ -70,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAssetManagerLocationId(null);
     setAssignedLocationId(null);
     setDamageLockCase(null);
+    lastResolvedUserIdRef.current = null;
   }, []);
 
   const applyAccessContext = useCallback((access: AccessContextRow) => {
@@ -79,21 +95,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAssignedLocationId(access.assigned_location_id ?? access.asset_manager_location_id ?? null);
     setProfileName(
       [access.display_name?.trim(), access.surname?.trim()].filter(Boolean).join(" ") ||
-        user?.email?.split("@")[0] ||
+        userEmailRef.current?.split("@")[0] ||
         "Operator",
     );
     setAuthError(null);
-  }, [user]);
+  }, []);
 
   const handleAccessError = useCallback((message: string) => {
-    if (isTransientAccessError(message) && (roles.length > 0 || accessState === "approved" || accessState === "pending_approval" || accessState === "damage_locked")) {
+    if (
+      isTransientAccessError(message) &&
+      (rolesRef.current.length > 0 ||
+        accessStateRef.current === "approved" ||
+        accessStateRef.current === "pending_approval" ||
+        accessStateRef.current === "damage_locked")
+    ) {
       setAuthError(message);
       return;
     }
     clearAccessState();
     setAccessState("error");
     setAuthError(message);
-  }, [accessState, clearAccessState, roles.length]);
+  }, [clearAccessState]);
 
   const loadAccessContext = useCallback(async (userId: string) => {
     const supabase = getSupabaseBrowserClient();
@@ -156,8 +178,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         event === "SIGNED_IN" ||
         event === "USER_UPDATED" ||
         lastResolvedUserIdRef.current !== nextSession.user.id ||
-        roles.length === 0 ||
-        accessState === "loading";
+        rolesRef.current.length === 0 ||
+        accessStateRef.current === "loading";
 
       if (!shouldReloadAccess) {
         setLoading(false);
@@ -175,7 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [accessState, clearAccessState, handleAccessError, isConfigured, loadAccessContext, roles.length]);
+  }, [clearAccessState, handleAccessError, isConfigured, loadAccessContext]);
 
   const retryAccessLoad = useCallback(async () => {
     if (!user) return;
