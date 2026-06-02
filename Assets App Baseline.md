@@ -1815,6 +1815,105 @@ This snapshot records the current implementation state across the top-level web 
 - `npm run lint` passes
 - `npm run build` passes
 
+## 58. Implementation Checkpoint - 2026-06-02
+This checkpoint records the live `Settings > Users` pass completed after the earlier `Kits`, `Consumables`, and `Config` settings work.
+
+### Users settings progress
+- `Settings > Users` is no longer a read-only placeholder.
+- The page now supports a real admin/manager edit flow for the user fields that are already confirmed by the current schema.
+
+### Scope of the implemented user editor
+- The user editor now supports:
+  - first name
+  - surname
+  - home base assignment
+  - primary role assignment for admins
+- Asset managers can only work inside their scoped location view.
+- Asset managers do not get role-edit controls.
+
+### Backend contract added
+- A new write-side RPC now exists for the user editor flow:
+  - `save_settings_user`
+- The RPC updates:
+  - `profiles.display_name`
+  - `profiles.surname`
+  - `profiles.full_name`
+  - `profiles.assigned_location_id`
+  - `profiles.asset_manager_location_id`
+  - primary `user_roles` row replacement when a role is provided
+
+### Implementation guardrails kept in place
+- The current pass does not invent user-management fields that are not yet proven by the rebuild schema.
+- Approval state and locked-state controls remain read-only in this pass.
+- Department assignment is still not added as a write flow because the current user surface does not prove a stable department write path.
+
+### Verification completed
+- `npm run lint` passes after the live `Users` pass.
+- `npm run build` passes after the live `Users` pass.
+- Local runtime smoke test passed:
+  - `/settings` returned `200`
+  - `/check-out-in` returned `200`
+  - `/requests` returned `200`
+
+### Recommended next step
+- Continue with the remaining `Settings` depth:
+  - `Reports`
+  - `Duplicates`
+
+## 59. Current Progress Snapshot - 2026-06-02
+This snapshot supersedes the prior 2026-06-02 snapshot and records the current state after the live `Settings > Users` pass and localhost runtime smoke test.
+
+### Current page status
+- `Inventory`
+  - live grouped inventory data
+  - selected unit detail surface
+  - recent asset-history preview
+- `My Assets`
+  - live assigned assets
+  - live pending recipient approvals
+  - live pending handovers
+  - live damage history where available
+- `Requests`
+  - live asset request submit
+  - live special request submit
+  - live return request submit
+  - live request history
+- `Approvals`
+  - live approval queue where backend surface exists
+  - live damage queue where backend surface exists
+  - live review actions where confirmed
+- `Check-out/In`
+  - live `Standard`
+  - live `Permanent`
+  - live `Stationed`
+  - live `Sunday Kits` first pass
+  - live `QR Scan` manual batch pass
+- `Dashboard`
+  - live role-aware counts and feed cards
+- `Settings`
+  - live `Profile`
+  - live `Users` first pass
+  - live `Locations`
+  - live `Departments`
+  - live `Kits`
+  - live `Consumables`
+  - live `Config > qr_export`
+  - `Reports` and `Duplicates` still remain to be finished
+
+### Remaining major implementation focus
+- `Settings > Reports`
+- `Settings > Duplicates`
+- deeper Sunday-kit item-level tracking if required later
+- camera-based QR capture if required later
+
+### Verification state at this snapshot
+- `npm run lint` passes
+- `npm run build` passes
+- local `next start` smoke test passed on:
+  - `/settings`
+  - `/check-out-in`
+  - `/requests`
+
 ## 56. Implementation Checkpoint - 2026-06-02
 This checkpoint records the live `Settings > Kits` write-side pass completed after the second live `Settings` write-side pass.
 

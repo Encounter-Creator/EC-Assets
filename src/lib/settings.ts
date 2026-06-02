@@ -291,3 +291,99 @@ export async function setDepartmentActiveState(
     p_active: input.active,
   });
 }
+
+export async function createConsumable(
+  supabase: SupabaseClient,
+  input: {
+    name: string;
+    department: string;
+    unit: string;
+    stockOnHand: number;
+    reorderLevel: number;
+  },
+) {
+  return supabase.rpc("create_settings_consumable", {
+    p_name: input.name.trim(),
+    p_department: input.department.trim() || null,
+    p_unit: input.unit.trim(),
+    p_stock_on_hand: input.stockOnHand,
+    p_reorder_level: input.reorderLevel,
+  });
+}
+
+export async function setConsumableActiveState(
+  supabase: SupabaseClient,
+  input: {
+    consumableId: string;
+    active: boolean;
+  },
+) {
+  return supabase.rpc("set_settings_consumable_active", {
+    p_consumable_id: input.consumableId,
+    p_active: input.active,
+  });
+}
+
+export async function saveSettingsConfig(
+  supabase: SupabaseClient,
+  input: {
+    key: string;
+    value: Record<string, unknown>;
+    description?: string | null;
+  },
+) {
+  return supabase.rpc("save_settings_config", {
+    p_key: input.key,
+    p_value: input.value,
+    p_description: input.description ?? null,
+  });
+}
+
+export async function createKit(
+  supabase: SupabaseClient,
+  input: {
+    name: string;
+    homeBase: string;
+    itemCount: number;
+  },
+) {
+  return supabase.rpc("create_settings_kit", {
+    p_name: input.name.trim(),
+    p_home_base: input.homeBase.trim() || null,
+    p_item_count: input.itemCount,
+  });
+}
+
+export async function setKitActiveState(
+  supabase: SupabaseClient,
+  input: {
+    kitId: string;
+    active: boolean;
+  },
+) {
+  return supabase.rpc("set_settings_kit_active", {
+    p_kit_id: input.kitId,
+    p_active: input.active,
+  });
+}
+
+export async function saveSettingsUser(
+  supabase: SupabaseClient,
+  input: {
+    userId: string;
+    displayName: string;
+    surname: string;
+    assignedLocationId: string | null;
+    assetManagerLocationId: string | null;
+    role: string | null;
+  },
+) {
+  return supabase.rpc("save_settings_user", {
+    p_user_id: input.userId,
+    p_display_name: input.displayName.trim() || null,
+    p_surname: input.surname.trim() || null,
+    p_assigned_location_id: input.assignedLocationId,
+    p_asset_manager_location_id: input.assetManagerLocationId,
+    p_role: input.role?.trim() || null,
+  });
+}
