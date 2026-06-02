@@ -1,21 +1,25 @@
 "use client";
 
 import { AlertTriangle, ArrowRightLeft, Boxes, CheckCircle2, QrCode, RefreshCcw, RotateCcw, ScanLine, ShieldCheck, UserCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/contexts/auth-context";
 import {
   deploySundayKit,
   getFallbackCheckOperationsWorkspace,
   loadCheckOperationsWorkspace,
+  loadSundayKitDeploymentItems,
   resolveOperationalAssetsByCodes,
   returnSundayKitDeployment,
+  returnSundayKitDeploymentItems,
   runPermanentAssignment,
   runStationedCheckIn,
   runStationedCheckout,
   runStandardSignIn,
   runStandardSignOut,
   type CheckOperationsWorkspaceData,
+  type SundayKitDeploymentItemRecord,
   type ReturnRequestMonitorRecord,
   type SundayKitDeploymentRecord,
   type SundayKitRecord,
@@ -42,14 +46,37 @@ const tabMeta = [
   { id: "qr_scan", label: "QR Scan", icon: QrCode },
 ] as const;
 
+function isOpsTab(value: string | null): value is OpsTab {
+  return tabMeta.some((tab) => tab.id === value);
+}
+
+function parseQrCodes(value: string) {
+  return value
+    .split(/\r?\n|,/)
+    .map((code) => code.trim())
+    .filter(Boolean);
+}
+
+function mergeQrCodes(currentValue: string, nextCodes: string[]) {
+  const merged = [...new Set([...parseQrCodes(currentValue), ...nextCodes.map((code) => code.trim()).filter(Boolean)])];
+  return merged.join("\n");
+}
+
 export default function CheckOutInPage() {
+  const searchParams = useSearchParams();
+  const requestedTabValue = searchParams.get("tab");
+  const requestedTab: OpsTab | null = isOpsTab(requestedTabValue) ? requestedTabValue : null;
+  const requestedMode = searchParams.get("mode");
+  const requestedAssetId = searchParams.get("assetId");
   const { isAdmin, isAssetManager, isConfigured } = useAuth();
   const [workspace, setWorkspace] = useState<CheckOperationsWorkspaceData>(getFallbackCheckOperationsWorkspace());
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<OpsTab>("standard");
-  const [standardMode, setStandardMode] = useState<"sign_out" | "sign_in">("sign_out");
-  const [permanentMode, setPermanentMode] = useState<"direct_issue" | "reassign">("direct_issue");
-  const [stationedMode, setStationedMode] = useState<"temporary_use" | "return_to_site">("temporary_use");
+  const [activeTab, setActiveTab] = useState<OpsTab>(requestedTab ?? "standard");
+  const [standardMode, setStandardMode] = useState<"sign_out" | "sign_in">(requestedTab === "standard" && requestedMode === "sign_in" ? "sign_in" : "sign_out");
+  const [permanentMode, setPermanentMode] = useState<"direct_issue" | "reassign">(requestedTab === "permanent" && requestedMode === "reassign" ? "reassign" : "direct_issue");
+  const [stationedMode, setStationedMode] = useState<"temporary_use" | "return_to_site">(
+    requestedTab === "stationed" && requestedMode === "return_to_site" ? "return_to_site" : "temporary_use",
+  );
   const [qrMode, setQrMode] = useState<"sign_out" | "sign_in">("sign_out");
   const [sundayKitsMode, setSundayKitsMode] = useState<"deploy" | "returns">("deploy");
   const [selectedSignOutAssetIds, setSelectedSignOutAssetIds] = useState<string[]>([]);
@@ -65,18 +92,27 @@ export default function CheckOutInPage() {
   const [selectedPermanentHomeBaseId, setSelectedPermanentHomeBaseId] = useState("");
   const [selectedStationedLocationId, setSelectedStationedLocationId] = useState("");
   const [signInOutcome, setSignInOutcome] = useState<"Available" | "Damaged">("Available");
-  const [stationedOutcome, setStationedOutcome] = useState<"Stationed" | "Damaged">("Stationed");
+  const [stationedOutcome, setStationedOutcome] = useState<"Stationed" | "Available" | "Damaged">("Stationed");
   const [qrCodesInput, setQrCodesInput] = useState("");
   const [resolvedQrAssets, setResolvedQrAssets] = useState<StandardAssetRecord[]>([]);
+  const [unresolvedQrInputs, setUnresolvedQrInputs] = useState<string[]>([]);
   const [selectedQrRecipientId, setSelectedQrRecipientId] = useState("");
   const [selectedQrLocationId, setSelectedQrLocationId] = useState("");
   const [qrSignInOutcome, setQrSignInOutcome] = useState<"Available" | "Damaged">("Available");
+  const [qrCameraActive, setQrCameraActive] = useState(false);
+  const [qrCameraError, setQrCameraError] = useState<string | null>(null);
+  const [qrCameraStatus, setQrCameraStatus] = useState("Camera scan is ready when supported by this browser.");
   const [selectedSundayKitId, setSelectedSundayKitId] = useState("");
   const [selectedSundayKitRecipientId, setSelectedSundayKitRecipientId] = useState("");
   const [selectedSundayKitLocationId, setSelectedSundayKitLocationId] = useState("");
   const [selectedSundayDeploymentId, setSelectedSundayDeploymentId] = useState("");
   const [sundayReturnedCount, setSundayReturnedCount] = useState("0");
   const [sundayDamagedCount, setSundayDamagedCount] = useState("0");
+  const [sundayDeploymentItems, setSundayDeploymentItems] = useState<SundayKitDeploymentItemRecord[]>([]);
+  const [sundayDeploymentItemsSource, setSundayDeploymentItemsSource] = useState<"live" | "fallback">("fallback");
+  const [sundayDeploymentItemWarnings, setSundayDeploymentItemWarnings] = useState<string[]>([]);
+  const [loadingSundayDeploymentItems, setLoadingSundayDeploymentItems] = useState(false);
+  const [sundayReturnOutcomes, setSundayReturnOutcomes] = useState<Record<string, "Available" | "Damaged">>({});
   const [operationNote, setOperationNote] = useState("");
   const [permanentNote, setPermanentNote] = useState("");
   const [stationedNote, setStationedNote] = useState("");
@@ -84,6 +120,18 @@ export default function CheckOutInPage() {
   const [sundayKitsNote, setSundayKitsNote] = useState("");
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [busy, setBusy] = useState<"sign_out" | "sign_in" | "permanent" | "stationed" | "qr" | "sunday_kits" | null>(null);
+  const qrVideoRef = useRef<HTMLVideoElement | null>(null);
+  const qrImportInputRef = useRef<HTMLInputElement | null>(null);
+  const qrStreamRef = useRef<MediaStream | null>(null);
+  const qrAnimationFrameRef = useRef<number | null>(null);
+  const qrDetectedCodesRef = useRef<Set<string>>(new Set());
+  const qrDetectingRef = useRef(false);
+  const qrCameraSupported =
+    typeof window !== "undefined" &&
+    typeof navigator !== "undefined" &&
+    "mediaDevices" in navigator &&
+    typeof navigator.mediaDevices?.getUserMedia === "function" &&
+    "BarcodeDetector" in window;
 
   useEffect(() => {
     let cancelled = false;
@@ -114,6 +162,33 @@ export default function CheckOutInPage() {
       if (!cancelled) {
         setWorkspace(nextWorkspace);
         setLoading(false);
+        if (requestedAssetId) {
+          if (requestedTab === "standard") {
+            if (requestedMode === "sign_in") {
+              if (nextWorkspace.signInAssets.some((asset) => asset.id === requestedAssetId)) {
+                setSelectedSignInAssetIds((current) => (current.includes(requestedAssetId) ? current : [...current, requestedAssetId]));
+              }
+            } else if (nextWorkspace.signOutAssets.some((asset) => asset.id === requestedAssetId)) {
+              setSelectedSignOutAssetIds((current) => (current.includes(requestedAssetId) ? current : [...current, requestedAssetId]));
+            }
+          } else if (requestedTab === "stationed") {
+            if (requestedMode === "return_to_site") {
+              if (nextWorkspace.stationedActiveAssets.some((asset) => asset.id === requestedAssetId)) {
+                setSelectedStationedCheckInAssetIds((current) => (current.includes(requestedAssetId) ? current : [...current, requestedAssetId]));
+              }
+            } else if (nextWorkspace.stationedReadyAssets.some((asset) => asset.id === requestedAssetId)) {
+              setSelectedStationedCheckoutAssetIds((current) => (current.includes(requestedAssetId) ? current : [...current, requestedAssetId]));
+            }
+          } else if (requestedTab === "permanent") {
+            if (requestedMode === "reassign") {
+              if (nextWorkspace.signInAssets.some((asset) => asset.id === requestedAssetId)) {
+                setSelectedPermanentReassignAssetIds((current) => (current.includes(requestedAssetId) ? current : [...current, requestedAssetId]));
+              }
+            } else if (nextWorkspace.signOutAssets.some((asset) => asset.id === requestedAssetId)) {
+              setSelectedPermanentIssueAssetIds((current) => (current.includes(requestedAssetId) ? current : [...current, requestedAssetId]));
+            }
+          }
+        }
       }
     };
 
@@ -122,7 +197,28 @@ export default function CheckOutInPage() {
     return () => {
       cancelled = true;
     };
-  }, [isConfigured]);
+  }, [isConfigured, requestedAssetId, requestedMode, requestedTab]);
+
+  useEffect(() => {
+    const video = qrVideoRef.current;
+
+    return () => {
+      if (qrAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(qrAnimationFrameRef.current);
+      }
+      qrStreamRef.current?.getTracks().forEach((track) => track.stop());
+      qrStreamRef.current = null;
+      if (video) {
+        video.srcObject = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== "qr_scan" && qrCameraActive) {
+      stopQrCamera();
+    }
+  }, [activeTab, qrCameraActive]);
 
   const refreshWorkspace = async () => {
     if (!isConfigured) {
@@ -177,6 +273,24 @@ export default function CheckOutInPage() {
     () => workspace.sundayKitDeployments.find((deployment) => deployment.id === (selectedSundayDeploymentId || workspace.sundayKitDeployments[0]?.id)) ?? null,
     [selectedSundayDeploymentId, workspace.sundayKitDeployments],
   );
+  const pendingSundayDeploymentItems = useMemo(
+    () => sundayDeploymentItems.filter((item) => item.return_status === "Pending"),
+    [sundayDeploymentItems],
+  );
+  const resolvedSundayDeploymentItems = useMemo(
+    () => sundayDeploymentItems.filter((item) => item.return_status !== "Pending"),
+    [sundayDeploymentItems],
+  );
+  const selectedSundayItemResolutions = useMemo(
+    () =>
+      pendingSundayDeploymentItems
+        .filter((item) => sundayReturnOutcomes[item.id])
+        .map((item) => ({
+          itemId: item.id,
+          outcome: sundayReturnOutcomes[item.id],
+        })),
+    [pendingSundayDeploymentItems, sundayReturnOutcomes],
+  );
   const resolvedRecipientId = selectedRecipientId || workspace.recipients[0]?.id || "";
   const resolvedFinalLocationId = selectedFinalLocationId || workspace.locations[0]?.id || "";
   const resolvedPermanentRecipientId = selectedPermanentRecipientId || workspace.recipients[0]?.id || "";
@@ -189,6 +303,66 @@ export default function CheckOutInPage() {
   const resolvedSundayKitRecipientId = selectedSundayKitRecipientId || workspace.recipients[0]?.id || "";
   const resolvedSundayKitLocationId = selectedSundayKitLocationId || workspace.locations[0]?.id || "";
   const resolvedSundayDeploymentId = selectedSundayDeploymentId || workspace.sundayKitDeployments[0]?.id || "";
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadItems = async () => {
+      if (sundayKitsMode !== "returns" || !resolvedSundayDeploymentId) {
+        if (!cancelled) {
+          setSundayDeploymentItems([]);
+          setSundayDeploymentItemWarnings([]);
+          setSundayReturnOutcomes({});
+          setLoadingSundayDeploymentItems(false);
+        }
+        return;
+      }
+
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase || !isConfigured) {
+        if (!cancelled) {
+          setSundayDeploymentItems([]);
+          setSundayDeploymentItemsSource("fallback");
+          setSundayDeploymentItemWarnings(["Sunday kit item-level returns are unavailable until Supabase is configured."]);
+          setSundayReturnOutcomes({});
+          setLoadingSundayDeploymentItems(false);
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setLoadingSundayDeploymentItems(true);
+      }
+
+      try {
+        const result = await loadSundayKitDeploymentItems(supabase, resolvedSundayDeploymentId);
+        if (!cancelled) {
+          setSundayDeploymentItems(result.items);
+          setSundayDeploymentItemsSource(result.source);
+          setSundayDeploymentItemWarnings(result.warnings);
+          setSundayReturnOutcomes({});
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : "Sunday kit deployment items could not be loaded.";
+          setSundayDeploymentItems([]);
+          setSundayDeploymentItemsSource("fallback");
+          setSundayDeploymentItemWarnings([message]);
+          setSundayReturnOutcomes({});
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingSundayDeploymentItems(false);
+        }
+      }
+    };
+
+    void loadItems();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isConfigured, resolvedSundayDeploymentId, sundayKitsMode]);
 
   const toggleAsset = (assetId: string, mode: "sign_out" | "sign_in") => {
     const setter = mode === "sign_out" ? setSelectedSignOutAssetIds : setSelectedSignInAssetIds;
@@ -394,11 +568,110 @@ export default function CheckOutInPage() {
     }
   };
 
+  function stopQrCamera() {
+    if (qrAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(qrAnimationFrameRef.current);
+      qrAnimationFrameRef.current = null;
+    }
+    qrStreamRef.current?.getTracks().forEach((track) => track.stop());
+    qrStreamRef.current = null;
+    if (qrVideoRef.current) {
+      qrVideoRef.current.srcObject = null;
+    }
+    qrDetectingRef.current = false;
+    setQrCameraActive(false);
+    setQrCameraStatus("Camera stopped. You can still paste or scan codes into the batch field.");
+  }
+
+  const startQrCamera = async () => {
+    if (!qrCameraSupported) {
+      setQrCameraError("This browser does not support in-tab camera barcode detection. Use the manual batch field instead.");
+      return;
+    }
+
+    const BarcodeDetectorCtor = (window as Window & typeof globalThis & {
+      BarcodeDetector?: new (options?: { formats?: string[] }) => {
+        detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
+      };
+    }).BarcodeDetector;
+
+    if (!BarcodeDetectorCtor) {
+      setQrCameraError("Barcode detection is not available in this browser. Use the manual batch field instead.");
+      return;
+    }
+
+    try {
+      stopQrCamera();
+      setQrCameraError(null);
+      setQrCameraStatus("Starting camera scan...");
+      qrDetectedCodesRef.current = new Set(parseQrCodes(qrCodesInput));
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+        },
+        audio: false,
+      });
+
+      qrStreamRef.current = stream;
+
+      if (qrVideoRef.current) {
+        qrVideoRef.current.srcObject = stream;
+        await qrVideoRef.current.play();
+      }
+
+      const detector = new BarcodeDetectorCtor({
+        formats: ["qr_code"],
+      });
+
+      setQrCameraActive(true);
+      setQrCameraStatus("Camera is live. New QR codes will be appended to the batch field.");
+
+      const scanFrame = async () => {
+        if (!qrVideoRef.current || !qrStreamRef.current) {
+          return;
+        }
+
+        if (!qrDetectingRef.current && qrVideoRef.current.readyState >= 2) {
+          qrDetectingRef.current = true;
+          try {
+            const codes = await detector.detect(qrVideoRef.current);
+            const nextCodes = codes
+              .map((code) => code.rawValue?.trim() ?? "")
+              .filter(Boolean)
+              .filter((code) => !qrDetectedCodesRef.current.has(code));
+
+            if (nextCodes.length > 0) {
+              nextCodes.forEach((code) => qrDetectedCodesRef.current.add(code));
+              setQrCodesInput((current) => mergeQrCodes(current, nextCodes));
+              setResolvedQrAssets([]);
+              setUnresolvedQrInputs([]);
+              setQrCameraStatus(`Camera captured ${qrDetectedCodesRef.current.size} unique code${qrDetectedCodesRef.current.size === 1 ? "" : "s"} in this batch.`);
+            }
+          } catch {
+            // Ignore per-frame detection errors and keep the camera session alive.
+          } finally {
+            qrDetectingRef.current = false;
+          }
+        }
+
+        qrAnimationFrameRef.current = window.requestAnimationFrame(() => {
+          void scanFrame();
+        });
+      };
+
+      qrAnimationFrameRef.current = window.requestAnimationFrame(() => {
+        void scanFrame();
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Camera scan could not start.";
+      stopQrCamera();
+      setQrCameraError(message);
+    }
+  };
+
   const resolveQrBatch = async () => {
-    const codes = qrCodesInput
-      .split(/\r?\n|,/)
-      .map((code) => code.trim())
-      .filter(Boolean);
+    const codes = parseQrCodes(qrCodesInput);
 
     if (codes.length === 0) {
       setFeedback({ tone: "error", message: "Paste or scan at least one asset code first." });
@@ -413,17 +686,57 @@ export default function CheckOutInPage() {
 
     setBusy("qr");
     try {
-      const rows = await resolveOperationalAssetsByCodes(supabase, { codes });
-      setResolvedQrAssets(rows);
+      const result = await resolveOperationalAssetsByCodes(supabase, { codes });
+      setResolvedQrAssets(result.assets);
+      setUnresolvedQrInputs(result.unresolvedInputs);
+      if (result.assets.length === 0) {
+        setFeedback({
+          tone: "error",
+          message:
+            result.unresolvedInputs.length > 0
+              ? `No assets matched this batch. ${result.unresolvedInputs.length} scan${result.unresolvedInputs.length === 1 ? "" : "s"} did not resolve.`
+              : "No assets matched this batch.",
+        });
+        return;
+      }
       setFeedback({
-        tone: "success",
-        message: `Resolved ${rows.length} asset item${rows.length === 1 ? "" : "s"} from the QR/manual batch.`,
+        tone: result.unresolvedInputs.length > 0 ? "info" : "success",
+        message:
+          result.unresolvedInputs.length > 0
+            ? `Resolved ${result.assets.length} asset item${result.assets.length === 1 ? "" : "s"}. ${result.unresolvedInputs.length} scan${result.unresolvedInputs.length === 1 ? "" : "s"} did not resolve and will be skipped.`
+            : `Resolved ${result.assets.length} asset item${result.assets.length === 1 ? "" : "s"} from the QR/manual batch.`,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "QR batch resolution failed.";
       setFeedback({ tone: "error", message });
     } finally {
       setBusy(null);
+    }
+  };
+
+  const importQrBatchFile = async (file: File | null) => {
+    if (!file) return;
+
+    try {
+      const rawText = await file.text();
+      const importedCodes = parseQrCodes(rawText);
+
+      if (importedCodes.length === 0) {
+        setFeedback({ tone: "error", message: "The selected file did not contain any usable QR or asset-code entries." });
+        return;
+      }
+
+      setQrCodesInput((current) => mergeQrCodes(current, importedCodes));
+      setResolvedQrAssets([]);
+      setUnresolvedQrInputs([]);
+      setQrCameraStatus(`Imported ${importedCodes.length} code${importedCodes.length === 1 ? "" : "s"} from ${file.name}.`);
+      setFeedback({
+        tone: "success",
+        message: `Imported ${importedCodes.length} QR or asset-code entr${importedCodes.length === 1 ? "y" : "ies"} from ${file.name}. Resolve the batch to continue.`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The selected batch file could not be read.";
+      setFeedback({ tone: "error", message });
     }
   };
 
@@ -473,6 +786,7 @@ export default function CheckOutInPage() {
         message: `${resolvedQrAssets.length} asset item${resolvedQrAssets.length === 1 ? "" : "s"} processed through the QR batch ${qrMode === "sign_out" ? "sign-out" : "sign-in"} flow.`,
       });
       setResolvedQrAssets([]);
+      setUnresolvedQrInputs([]);
       setQrCodesInput("");
       setQrNote("");
       await refreshWorkspace();
@@ -522,31 +836,55 @@ export default function CheckOutInPage() {
           message: `${selectedSundayKit.name} deployed into the live Sunday Kits workflow.`,
         });
       } else {
-        const returnedCount = Number.parseInt(sundayReturnedCount, 10);
-        const damagedCount = Number.parseInt(sundayDamagedCount, 10);
         if (!resolvedSundayDeploymentId) {
           setFeedback({ tone: "error", message: "Choose a deployment first." });
           return;
         }
-        if (Number.isNaN(returnedCount) || Number.isNaN(damagedCount) || returnedCount < 0 || damagedCount < 0 || returnedCount + damagedCount === 0) {
-          setFeedback({ tone: "error", message: "Enter valid returned and/or damaged item counts first." });
-          return;
+        if (sundayDeploymentItemsSource === "live") {
+          if (pendingSundayDeploymentItems.length === 0) {
+            setFeedback({ tone: "info", message: "All Sunday kit items on this deployment are already resolved." });
+            return;
+          }
+          if (selectedSundayItemResolutions.length === 0) {
+            setFeedback({ tone: "error", message: "Choose at least one pending Sunday kit item outcome first." });
+            return;
+          }
+
+          const { error } = await returnSundayKitDeploymentItems(supabase, {
+            deploymentId: resolvedSundayDeploymentId,
+            itemResolutions: selectedSundayItemResolutions,
+            note: sundayKitsNote,
+          });
+          if (error) throw error;
+
+          setFeedback({
+            tone: "success",
+            message: `${selectedSundayItemResolutions.length} Sunday kit item${selectedSundayItemResolutions.length === 1 ? "" : "s"} resolved in the live deployment ledger.`,
+          });
+          setSundayReturnOutcomes({});
+        } else {
+          const returnedCount = Number.parseInt(sundayReturnedCount, 10);
+          const damagedCount = Number.parseInt(sundayDamagedCount, 10);
+          if (Number.isNaN(returnedCount) || Number.isNaN(damagedCount) || returnedCount < 0 || damagedCount < 0 || returnedCount + damagedCount === 0) {
+            setFeedback({ tone: "error", message: "Enter valid returned and/or damaged item counts first." });
+            return;
+          }
+
+          const { error } = await returnSundayKitDeployment(supabase, {
+            deploymentId: resolvedSundayDeploymentId,
+            returnedCount,
+            damagedCount,
+            note: sundayKitsNote,
+          });
+          if (error) throw error;
+
+          setFeedback({
+            tone: "success",
+            message: "Sunday kit partial return recorded into the legacy deployment ledger.",
+          });
+          setSundayReturnedCount("0");
+          setSundayDamagedCount("0");
         }
-
-        const { error } = await returnSundayKitDeployment(supabase, {
-          deploymentId: resolvedSundayDeploymentId,
-          returnedCount,
-          damagedCount,
-          note: sundayKitsNote,
-        });
-        if (error) throw error;
-
-        setFeedback({
-          tone: "success",
-          message: "Sunday kit partial return recorded into the live deployment ledger.",
-        });
-        setSundayReturnedCount("0");
-        setSundayDamagedCount("0");
       }
 
       setSundayKitsNote("");
@@ -950,7 +1288,7 @@ export default function CheckOutInPage() {
                       body={
                         stationedMode === "temporary_use"
                           ? "Select stationed assets and assign them to a responsible user for temporary use. This moves them into the traveling state."
-                          : "Bring traveling stationed assets back into a final site and resolve them as Stationed or Damaged."
+                          : "Bring traveling stationed assets back into a final site and resolve them as Stationed, Available, or Damaged."
                       }
                     />
                     <AssetSelectionList
@@ -996,9 +1334,10 @@ export default function CheckOutInPage() {
                         <SelectField
                           label="Outcome"
                           value={stationedOutcome}
-                          onChange={(value) => setStationedOutcome(value as "Stationed" | "Damaged")}
+                          onChange={(value) => setStationedOutcome(value as "Stationed" | "Available" | "Damaged")}
                           options={[
                             { label: "Stationed", value: "Stationed" },
+                            { label: "Available", value: "Available" },
                             { label: "Damaged", value: "Damaged" },
                           ]}
                         />
@@ -1033,7 +1372,7 @@ export default function CheckOutInPage() {
                           : `Run Return To Site${selectedStationedCheckInAssetIds.length > 0 ? ` (${selectedStationedCheckInAssetIds.length})` : ""}`}
                     </button>
                     <div className="rounded-[1rem] border border-sky-500/18 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-                      Stationed now runs as its own site-resting workflow. Temporary use pushes assets into Traveling, and return intake can resolve them back to Stationed or into the damage path.
+                      Stationed now runs as its own site-resting workflow. Temporary use pushes assets into Traveling, and return intake can resolve them back to Stationed, Available, or into the damage path.
                     </div>
                   </div>
                 </div>
@@ -1072,7 +1411,7 @@ export default function CheckOutInPage() {
                       body={
                         sundayKitsMode === "deploy"
                           ? "Deploy one saved Sunday kit at a time from the live kits list into a responsible-user workflow."
-                          : "Record partial or complete returns against live Sunday kit deployments using returned and damaged item counts."
+                          : "Resolve pending Sunday kit return items individually where the live deployment-item ledger exists, with count-based fallback only for older or incomplete backend surfaces."
                       }
                     />
 
@@ -1169,10 +1508,103 @@ export default function CheckOutInPage() {
                     ) : (
                       <>
                         <SundayDeploymentSummaryCard deployment={selectedSundayDeployment} />
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <NumberField label="Returned count" value={sundayReturnedCount} onChange={setSundayReturnedCount} />
-                          <NumberField label="Damaged count" value={sundayDamagedCount} onChange={setSundayDamagedCount} />
-                        </div>
+                        {loadingSundayDeploymentItems ? (
+                          <div className="rounded-[1rem] border border-primary/12 bg-card/45 px-4 py-3 text-sm text-muted-foreground">
+                            Loading deployment items...
+                          </div>
+                        ) : sundayDeploymentItemsSource === "live" ? (
+                          <div className="space-y-4">
+                            {sundayDeploymentItemWarnings.length > 0 && (
+                              <div className="rounded-[1rem] border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-100/85">
+                                {sundayDeploymentItemWarnings.map((warning) => (
+                                  <div key={warning}>{warning}</div>
+                                ))}
+                              </div>
+                            )}
+                            <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
+                              <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Pending return items</div>
+                              <div className="mt-3 space-y-3">
+                                {pendingSundayDeploymentItems.length === 0 ? (
+                                  <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-8 text-center text-sm text-muted-foreground">
+                                    No pending Sunday kit items remain on this deployment.
+                                  </div>
+                                ) : (
+                                  pendingSundayDeploymentItems.map((item) => (
+                                    <div key={item.id} className="rounded-[1rem] border border-primary/12 bg-card/35 p-4">
+                                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                        <div className="min-w-0">
+                                          <div className="font-mono text-xs uppercase tracking-[0.14em] text-primary">{item.asset_code ?? `Item ${item.sort_order}`}</div>
+                                          <div className="mt-1 text-sm text-foreground">{item.asset_name}</div>
+                                          <div className="mt-1 text-xs text-muted-foreground">
+                                            {item.serial_number ?? "No serial"} | Item {item.sort_order}
+                                          </div>
+                                        </div>
+                                        <SelectField
+                                          label="Outcome"
+                                          value={sundayReturnOutcomes[item.id] ?? ""}
+                                          onChange={(value) =>
+                                            setSundayReturnOutcomes((current) => ({
+                                              ...current,
+                                              [item.id]: value as "Available" | "Damaged",
+                                            }))
+                                          }
+                                          options={[
+                                            { label: "Choose outcome", value: "" },
+                                            { label: "Available", value: "Available" },
+                                            { label: "Damaged", value: "Damaged" },
+                                          ]}
+                                        />
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                            <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
+                              <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Resolved items</div>
+                              <div className="mt-3 space-y-3">
+                                {resolvedSundayDeploymentItems.length === 0 ? (
+                                  <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-8 text-center text-sm text-muted-foreground">
+                                    No resolved Sunday kit items yet.
+                                  </div>
+                                ) : (
+                                  resolvedSundayDeploymentItems.map((item) => (
+                                    <div key={item.id} className="rounded-[1rem] border border-primary/12 bg-card/35 p-4">
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <div className="font-mono text-xs uppercase tracking-[0.14em] text-primary">{item.asset_code ?? `Item ${item.sort_order}`}</div>
+                                          <div className="mt-1 text-sm text-foreground">{item.asset_name}</div>
+                                        </div>
+                                        <span className={cn(
+                                          "inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
+                                          item.return_status === "Available"
+                                            ? "border-primary/26 bg-primary/12 text-primary"
+                                            : "border-destructive/20 bg-destructive/10 text-destructive",
+                                        )}>
+                                          {item.return_status}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {sundayDeploymentItemWarnings.length > 0 && (
+                              <div className="rounded-[1rem] border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-100/85">
+                                {sundayDeploymentItemWarnings.map((warning) => (
+                                  <div key={warning}>{warning}</div>
+                                ))}
+                              </div>
+                            )}
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <NumberField label="Returned count" value={sundayReturnedCount} onChange={setSundayReturnedCount} />
+                              <NumberField label="Damaged count" value={sundayDamagedCount} onChange={setSundayDamagedCount} />
+                            </div>
+                          </div>
+                        )}
                       </>
                     )}
                     <textarea
@@ -1188,7 +1620,7 @@ export default function CheckOutInPage() {
                         busy !== null ||
                         (sundayKitsMode === "deploy"
                           ? !selectedSundayKit || !resolvedSundayKitRecipientId || !resolvedSundayKitLocationId
-                          : !resolvedSundayDeploymentId)
+                          : !resolvedSundayDeploymentId || (sundayDeploymentItemsSource === "live" && selectedSundayItemResolutions.length === 0))
                       }
                       className="matrix-button inline-flex h-12 w-full items-center justify-center gap-2 rounded-[1.15rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
                     >
@@ -1200,7 +1632,7 @@ export default function CheckOutInPage() {
                           : "Record Sunday Kit Return"}
                     </button>
                     <div className="rounded-[1rem] border border-sky-500/18 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-                      This first live pass tracks kit deployment and partial returns in a dedicated ledger. Full item-level return resolution is still intentionally deferred.
+                      Sunday kit returns now prefer item-level resolution through the live deployment ledger. Count-based return capture remains only as a fallback for older or incomplete backend surfaces.
                     </div>
                   </div>
                 </div>
@@ -1236,12 +1668,73 @@ export default function CheckOutInPage() {
                   <div className="space-y-4">
                     <WorkspaceCard
                       title="Bulk QR in-tab operations"
-                      body="Camera integration is still deferred, but this tab now supports live manual scan batches: paste or scan multiple asset codes, resolve them against the live asset table, then run one compatible batch action."
+                      body="Capture QR codes with the device camera when supported, or paste/scan a manual batch into the same execution flow. Resolve the batch against live assets, then run one compatible operational action."
                     />
+                    <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Camera scan</div>
+                          <div className="mt-2 text-sm text-muted-foreground">{qrCameraStatus}</div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void startQrCamera()}
+                            disabled={busy !== null || qrCameraActive}
+                            className="inline-flex h-10 items-center justify-center rounded-[0.9rem] border border-primary/18 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Start Camera
+                          </button>
+                          <button
+                            type="button"
+                            onClick={stopQrCamera}
+                            disabled={busy !== null || !qrCameraActive}
+                            className="inline-flex h-10 items-center justify-center rounded-[0.9rem] border border-primary/18 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Stop Camera
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => qrImportInputRef.current?.click()}
+                            disabled={busy !== null}
+                            className="inline-flex h-10 items-center justify-center rounded-[0.9rem] border border-primary/18 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Import Batch File
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        ref={qrImportInputRef}
+                        type="file"
+                        accept=".txt,.csv,text/plain,text/csv"
+                        className="hidden"
+                        onChange={(event) => {
+                          void importQrBatchFile(event.target.files?.[0] ?? null);
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                      <div className="mt-4 overflow-hidden rounded-[1rem] border border-primary/12 bg-background/40">
+                        <video ref={qrVideoRef} autoPlay muted playsInline className="aspect-video w-full bg-black/60 object-cover" />
+                      </div>
+                      {qrCameraError && (
+                        <div className="mt-3 rounded-[1rem] border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-100/85">
+                          {qrCameraError}
+                        </div>
+                      )}
+                      {!qrCameraSupported && (
+                        <div className="mt-3 rounded-[1rem] border border-primary/12 bg-card/35 px-4 py-3 text-sm text-muted-foreground">
+                          Camera detection is not supported in this browser, so use the manual batch field below.
+                        </div>
+                      )}
+                    </div>
                     <textarea
                       value={qrCodesInput}
-                      onChange={(event) => setQrCodesInput(event.target.value)}
-                      placeholder="Paste or scan one asset code per line, or separate codes with commas"
+                      onChange={(event) => {
+                        setQrCodesInput(event.target.value);
+                        setResolvedQrAssets([]);
+                        setUnresolvedQrInputs([]);
+                      }}
+                      placeholder="Paste or scan one asset QR value or asset code per line, or separate entries with commas"
                       className="matrix-field min-h-36 w-full rounded-[1.15rem] px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
                     />
                     <button
@@ -1254,8 +1747,23 @@ export default function CheckOutInPage() {
                       {busy === "qr" ? "Resolving Batch" : "Resolve Batch"}
                     </button>
                     <div className="rounded-[1rem] border border-sky-500/18 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-                      This first live pass uses manual scan input instead of camera capture, but still executes one real operational batch at a time.
+                      Camera capture, file import, and manual entry now feed the same live QR batch flow so operators can keep one operational batch at a time.
                     </div>
+                    {unresolvedQrInputs.length > 0 && (
+                      <div className="rounded-[1rem] border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-100/85">
+                        <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-amber-300">Unresolved scans</div>
+                        <div className="mt-2">
+                          These entries did not match a live asset by QR UUID or asset tag and will not be included in execution.
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {unresolvedQrInputs.map((input) => (
+                            <span key={input} className="rounded-full border border-amber-400/20 px-3 py-1 font-mono text-[11px] text-amber-200">
+                              {input}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-4">

@@ -1,5 +1,5 @@
 export type AppRole = "admin" | "main_admin" | "asset_manager" | "staff" | "volunteer";
-export type AccessState = "loading" | "approved" | "pending_approval" | "error" | "unconfigured";
+export type AccessState = "loading" | "approved" | "pending_approval" | "damage_locked" | "error" | "unconfigured";
 
 export function getPrimaryRoleLabel(roles: AppRole[]) {
   if (roles.includes("main_admin")) return "Main Admin";

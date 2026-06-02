@@ -1,7 +1,7 @@
 create or replace function public.create_settings_consumable(
   p_name text,
   p_department text default null,
-  p_unit text,
+  p_unit text default '',
   p_stock_on_hand integer default 0,
   p_reorder_level integer default 0
 )

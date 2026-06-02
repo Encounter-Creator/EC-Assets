@@ -22,6 +22,8 @@ export type ReturnableAsset = {
   location: string;
 };
 
+export type SpecialRequestType = "Stationed Use" | "Permanent Reassignment";
+
 export type RequestHistoryItem = {
   id: string;
   type: "asset" | "special" | "return";
@@ -475,7 +477,7 @@ export async function submitSpecialRequest(
   payload: {
     activeLocationId: string | null;
     assetId: string;
-    requestType: "Stationed Use" | "Permanent Reassignment";
+    requestType: SpecialRequestType;
     neededBy: string;
     duration: string;
     reason: string;
@@ -500,4 +502,22 @@ export function getRequestAssetHint(status: string) {
   if (normalized === "assigned") return "Assigned assets are not requestable from this flow.";
   if (status === "permanent") return "Permanent items may need holder release before manager review.";
   return `${getAssetStatusLabel(status)} asset`;
+}
+
+export function isSpecialRequestAssetCompatible(status: string, requestType: SpecialRequestType) {
+  const normalized = normalizeAssetStatus(status);
+  if (requestType === "Stationed Use") return normalized === "stationed";
+  return status.trim().toLowerCase() === "permanent";
+}
+
+export function getSpecialRequestAssetHint(status: string, requestType: SpecialRequestType) {
+  if (requestType === "Stationed Use") {
+    return isSpecialRequestAssetCompatible(status, requestType)
+      ? "Stationed asset is compatible with Stationed Use."
+      : "Only stationed assets can be submitted through Stationed Use.";
+  }
+
+  return isSpecialRequestAssetCompatible(status, requestType)
+    ? "Permanent asset is compatible with Permanent Reassignment."
+    : "Only permanent assets can be submitted through Permanent Reassignment.";
 }

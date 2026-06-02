@@ -1,6 +1,8 @@
 import { AppShell } from "@/components/app-shell";
 import { ProtectedApp } from "@/components/protected-app";
 
+export const dynamic = "force-dynamic";
+
 export default function ProtectedLayout({
   children,
 }: Readonly<{

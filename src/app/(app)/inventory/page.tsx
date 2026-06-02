@@ -2,11 +2,12 @@
 
 import { AlertTriangle, ExternalLink, History, RefreshCcw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useLocationScope } from "@/contexts/location-scope-context";
 import { getAssetStatusLabel, getStatusBadgeClass, groupAssetsByName, normalizeAssetStatus, type AssetStatus } from "@/lib/assets";
-import { fallbackInventoryAssets, fallbackInventoryHistory, loadInventoryAssetHistory, loadInventoryWorkspace, type InventoryHistoryRecord, type InventoryWorkspaceData } from "@/lib/inventory";
+import { fallbackInventoryAssets, fallbackInventoryHistory, loadInventoryAssetHistory, loadInventoryWorkspace, updateInventoryAssetDetails, type InventoryHistoryRecord, type InventoryWorkspaceData } from "@/lib/inventory";
 import { matchesSearchQuery } from "@/lib/search";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -19,9 +20,83 @@ const fallbackWorkspace: InventoryWorkspaceData = {
   warnings: ["Supabase is not configured yet, so Inventory is using the rebuild preview dataset."],
 };
 
+type InventoryQuickAction = {
+  label: string;
+  href: string;
+  tone?: "default" | "warning";
+};
+
+function getInventoryActionSummary(status: AssetStatus) {
+  switch (normalizeAssetStatus(status)) {
+    case "available":
+      return "Available units can move directly into request or operational issue workflows.";
+    case "assigned":
+      return "Assigned units usually need return, sign-in, or reassignment handling next.";
+    case "traveling":
+      return "Traveling units should be brought back through sign-in or reviewed for follow-up handling.";
+    case "stationed":
+      return "Stationed units can move into temporary-use or return-to-site handling.";
+    case "damaged":
+      return "Damaged units are operationally blocked and should route into damage review.";
+    default:
+      return "Choose the next compatible workflow from the actions below.";
+  }
+}
+
+function getInventoryQuickActions(input: {
+  assetId: string;
+  status: AssetStatus;
+  isAdmin: boolean;
+  isAssetManager: boolean;
+  isStaff: boolean;
+}) {
+  const normalizedStatus = normalizeAssetStatus(input.status);
+  const actions: InventoryQuickAction[] = [];
+
+  if ((input.isAdmin || input.isStaff) && normalizedStatus === "available") {
+    actions.push({ label: "Open Asset Request", href: `/requests?tab=asset&assetId=${encodeURIComponent(input.assetId)}` });
+  }
+
+  if ((input.isAdmin || input.isStaff) && ["assigned", "stationed", "traveling"].includes(normalizedStatus)) {
+    actions.push({ label: "Open Special Request", href: `/requests?tab=special&assetId=${encodeURIComponent(input.assetId)}` });
+  }
+
+  if ((input.isAdmin || input.isStaff) && ["assigned", "traveling", "stationed"].includes(normalizedStatus)) {
+    actions.push({ label: "Open Return Request", href: `/requests?tab=returns&assetId=${encodeURIComponent(input.assetId)}` });
+  }
+
+  if ((input.isAdmin || input.isAssetManager) && normalizedStatus === "available") {
+    actions.push({ label: "Open Standard Sign Out", href: `/check-out-in?tab=standard&mode=sign_out&assetId=${encodeURIComponent(input.assetId)}` });
+    actions.push({ label: "Open Permanent Issue", href: `/check-out-in?tab=permanent&mode=direct_issue&assetId=${encodeURIComponent(input.assetId)}` });
+    actions.push({ label: "Open Stationed Checkout", href: `/check-out-in?tab=stationed&mode=temporary_use&assetId=${encodeURIComponent(input.assetId)}` });
+  }
+
+  if ((input.isAdmin || input.isAssetManager) && ["assigned", "traveling"].includes(normalizedStatus)) {
+    actions.push({ label: "Open Standard Sign In", href: `/check-out-in?tab=standard&mode=sign_in&assetId=${encodeURIComponent(input.assetId)}` });
+  }
+
+  if ((input.isAdmin || input.isAssetManager) && normalizedStatus === "assigned") {
+    actions.push({ label: "Open Permanent Reassign", href: `/check-out-in?tab=permanent&mode=reassign&assetId=${encodeURIComponent(input.assetId)}` });
+  }
+
+  if ((input.isAdmin || input.isAssetManager) && normalizedStatus === "stationed") {
+    actions.push({ label: "Open Return-To-Site", href: `/check-out-in?tab=stationed&mode=return_to_site&assetId=${encodeURIComponent(input.assetId)}` });
+  }
+
+  if ((input.isAdmin || input.isAssetManager) && normalizedStatus === "damaged") {
+    actions.push({ label: "Review Damage Queue", href: "/approvals?tab=damage_locks", tone: "warning" });
+  }
+
+  return actions;
+}
+
 export default function InventoryPage() {
   const { isAdmin, isAssetManager, isStaff, isConfigured } = useAuth();
   const { activeLocationId, selectedLocationName } = useLocationScope();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedAssetId = searchParams.get("assetId");
   const [workspace, setWorkspace] = useState<InventoryWorkspaceData>(fallbackWorkspace);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -32,8 +107,14 @@ export default function InventoryPage() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [historyRows, setHistoryRows] = useState<InventoryHistoryRecord[]>(fallbackInventoryHistory);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editTag, setEditTag] = useState("");
+  const [editDepartmentId, setEditDepartmentId] = useState("");
+  const [saveFeedback, setSaveFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [savingAssetEdit, setSavingAssetEdit] = useState(false);
 
   const canBrowseInventory = isAdmin || isAssetManager || isStaff;
+  const canEditInventoryAsset = isAdmin || isAssetManager;
 
   useEffect(() => {
     let cancelled = false;
@@ -60,10 +141,23 @@ export default function InventoryPage() {
         setLoading(true);
       }
 
-      const nextWorkspace = await loadInventoryWorkspace(supabase, activeLocationId);
-      if (!cancelled) {
-        setWorkspace(nextWorkspace);
-        setLoading(false);
+      try {
+        const nextWorkspace = await loadInventoryWorkspace(supabase, activeLocationId);
+        if (!cancelled) {
+          setWorkspace(nextWorkspace);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Inventory could not be loaded.";
+        if (!cancelled) {
+          setWorkspace({
+            ...fallbackWorkspace,
+            warnings: [...fallbackWorkspace.warnings, message],
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
@@ -76,6 +170,17 @@ export default function InventoryPage() {
 
   const availableDepartments = useMemo(
     () => Array.from(new Set(workspace.assets.map((asset) => asset.department))).sort(),
+    [workspace.assets],
+  );
+  const departmentOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          workspace.assets
+            .filter((asset) => asset.departmentId && asset.department && asset.department !== "No department")
+            .map((asset) => [asset.departmentId as string, asset.department]),
+        ).entries(),
+      ).map(([id, name]) => ({ id, name })),
     [workspace.assets],
   );
 
@@ -110,15 +215,34 @@ export default function InventoryPage() {
   }, [availabilityFilter, departmentFilter, query, scopedAssets, statusFilter]);
 
   const groupedAssets = useMemo(() => groupAssetsByName(filteredAssets, (asset) => asset.location), [filteredAssets]);
+  const requestedGroup = useMemo(
+    () => groupedAssets.find((group) => group.items.some((asset) => asset.id === requestedAssetId)) ?? null,
+    [groupedAssets, requestedAssetId],
+  );
 
   const selectedGroup = useMemo(
-    () => groupedAssets.find((group) => group.key === selectedGroupKey) ?? groupedAssets[0] ?? null,
-    [groupedAssets, selectedGroupKey],
+    () => requestedGroup ?? groupedAssets.find((group) => group.key === selectedGroupKey) ?? groupedAssets[0] ?? null,
+    [groupedAssets, requestedGroup, selectedGroupKey],
   );
   const selectedAsset = useMemo(
-    () => selectedGroup?.items.find((asset) => asset.id === selectedAssetId) ?? selectedGroup?.items[0] ?? null,
-    [selectedAssetId, selectedGroup],
+    () =>
+      (requestedAssetId ? selectedGroup?.items.find((asset) => asset.id === requestedAssetId) : null) ??
+      selectedGroup?.items.find((asset) => asset.id === selectedAssetId) ??
+      selectedGroup?.items[0] ??
+      null,
+    [requestedAssetId, selectedAssetId, selectedGroup],
   );
+
+  useEffect(() => {
+    if (!selectedAsset) return;
+
+    queueMicrotask(() => {
+      setEditName(selectedAsset.name);
+      setEditTag(selectedAsset.tag);
+      setEditDepartmentId(selectedAsset.departmentId ?? "");
+      setSaveFeedback(null);
+    });
+  }, [selectedAsset]);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,10 +269,21 @@ export default function InventoryPage() {
         setHistoryLoading(true);
       }
 
-      const nextHistory = await loadInventoryAssetHistory(supabase, selectedAsset.id);
-      if (!cancelled) {
-        setHistoryRows(nextHistory);
-        setHistoryLoading(false);
+      try {
+        const nextHistory = await loadInventoryAssetHistory(supabase, selectedAsset.id);
+        if (!cancelled) {
+          setHistoryRows(nextHistory);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Asset history could not be loaded.";
+        if (!cancelled) {
+          setHistoryRows(fallbackInventoryHistory);
+          setSaveFeedback({ tone: "error", message });
+        }
+      } finally {
+        if (!cancelled) {
+          setHistoryLoading(false);
+        }
       }
     };
 
@@ -170,6 +305,80 @@ export default function InventoryPage() {
       </SectionShell>
     );
   }
+
+  const refreshInventoryWorkspace = async () => {
+    setLoading(true);
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase || !isConfigured) {
+      setWorkspace(fallbackWorkspace);
+      setLoading(false);
+      return;
+    }
+    try {
+      const nextWorkspace = await loadInventoryWorkspace(supabase, activeLocationId);
+      setWorkspace(nextWorkspace);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Inventory could not be refreshed.";
+      setWorkspace({
+        ...fallbackWorkspace,
+        warnings: [...fallbackWorkspace.warnings, message],
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const replaceInventoryRoute = (assetId: string | null) => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    if (assetId) {
+      nextParams.set("assetId", assetId);
+    } else {
+      nextParams.delete("assetId");
+    }
+    const nextQuery = nextParams.toString();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+  };
+
+  const saveAssetEdits = async () => {
+    if (!selectedAsset) return;
+    if (!editName.trim()) {
+      setSaveFeedback({ tone: "error", message: "Name is required." });
+      return;
+    }
+    if (!editTag.trim()) {
+      setSaveFeedback({ tone: "error", message: "Tag is required." });
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase || !isConfigured) {
+      setSaveFeedback({ tone: "error", message: "Supabase is not configured yet, so asset editing is unavailable." });
+      return;
+    }
+
+    setSavingAssetEdit(true);
+    try {
+      const { error } = await updateInventoryAssetDetails(supabase, {
+        assetId: selectedAsset.id,
+        name: editName,
+        tag: editTag,
+        departmentId: editDepartmentId || null,
+      });
+      if (error) throw error;
+
+      setSaveFeedback({ tone: "success", message: "Asset detail updated." });
+      await refreshInventoryWorkspace();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Asset update failed.";
+      setSaveFeedback({ tone: "error", message });
+    } finally {
+      setSavingAssetEdit(false);
+    }
+  };
+
+  const openAssetWorkflow = (href: string) => {
+    router.push(href);
+  };
 
   return (
     <SectionShell title="Inventory" kicker="Grouped catalog">
@@ -199,17 +408,7 @@ export default function InventoryPage() {
             <button
               type="button"
               onClick={() => {
-                setLoading(true);
-                const supabase = getSupabaseBrowserClient();
-                if (!supabase || !isConfigured) {
-                  setWorkspace(fallbackWorkspace);
-                  setLoading(false);
-                  return;
-                }
-                void loadInventoryWorkspace(supabase, activeLocationId).then((nextWorkspace) => {
-                  setWorkspace(nextWorkspace);
-                  setLoading(false);
-                });
+                void refreshInventoryWorkspace();
               }}
               className="inline-flex items-center gap-2 rounded-full border border-primary/18 bg-card/55 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
               disabled={loading}
@@ -290,7 +489,10 @@ export default function InventoryPage() {
                   <button
                     key={group.key}
                     type="button"
-                    onClick={() => setSelectedGroupKey(group.key)}
+                    onClick={() => {
+                      setSelectedGroupKey(group.key);
+                      replaceInventoryRoute(group.items[0]?.id ?? null);
+                    }}
                     className={cn(
                       "matrix-dashboard-bubble w-full p-4 text-left transition-transform hover:-translate-y-0.5",
                       selectedGroup?.key === group.key && "border-primary/34",
@@ -344,7 +546,10 @@ export default function InventoryPage() {
                       <button
                         key={asset.id}
                         type="button"
-                        onClick={() => setSelectedAssetId(asset.id)}
+                        onClick={() => {
+                          setSelectedAssetId(asset.id);
+                          replaceInventoryRoute(asset.id);
+                        }}
                         className={cn("w-full rounded-[1.2rem] border bg-card/45 p-4 text-left transition-colors", selected ? "border-primary/26" : "border-primary/12")}
                       >
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -401,11 +606,78 @@ export default function InventoryPage() {
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
                     <div className="rounded-[1rem] border border-primary/12 bg-card/35 p-4">
                       <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Allowed field edits</div>
-                      <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                        <div>Name</div>
-                        <div>Tag</div>
-                        <div>Department / Team</div>
-                        <div>Serial number and main notes remain locked in the current pass.</div>
+                      {canEditInventoryAsset ? (
+                        <div className="mt-3 space-y-3">
+                          <FormField label="Name" value={editName} onChange={setEditName} />
+                          <FormField label="Tag" value={editTag} onChange={setEditTag} />
+                          <SelectField
+                            label="Department / Team"
+                            value={editDepartmentId}
+                            onChange={setEditDepartmentId}
+                            options={[
+                              { label: "No department", value: "" },
+                              ...departmentOptions.map((department) => ({ label: department.name, value: department.id })),
+                            ]}
+                          />
+                          <div className="text-sm text-muted-foreground">Serial number and main notes remain locked in the current pass.</div>
+                          {saveFeedback && (
+                            <div className={cn(
+                              "rounded-[0.95rem] border px-3 py-3 text-sm",
+                              saveFeedback.tone === "success" ? "border-primary/20 bg-primary/8 text-primary" : "border-destructive/20 bg-destructive/8 text-destructive",
+                            )}>
+                              {saveFeedback.message}
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => void saveAssetEdits()}
+                            disabled={savingAssetEdit}
+                            className="matrix-button inline-flex h-11 w-full items-center justify-center rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {savingAssetEdit ? "Saving Asset" : "Save Allowed Edits"}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                          <div>Name</div>
+                          <div>Tag</div>
+                          <div>Department / Team</div>
+                          <div>Serial number and main notes remain locked in the current pass.</div>
+                          <div className="pt-2 text-primary/80">This role can view these editable fields, but only admin and asset-manager roles can save changes.</div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-[1rem] border border-primary/12 bg-card/35 p-4">
+                      <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Quick actions</div>
+                      <div className="mt-3 rounded-[0.95rem] border border-primary/12 bg-card/40 px-4 py-3 text-sm text-muted-foreground">
+                        {getInventoryActionSummary(selectedAsset.status)}
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        {getInventoryQuickActions({
+                          assetId: selectedAsset.id,
+                          status: selectedAsset.status,
+                          isAdmin,
+                          isAssetManager,
+                          isStaff,
+                        }).map((action) => (
+                          <button
+                            key={action.href}
+                            type="button"
+                            onClick={() => openAssetWorkflow(action.href)}
+                            className={cn(
+                              "rounded-[0.95rem] border px-4 py-3 text-left text-sm font-medium transition-colors",
+                              action.tone === "warning"
+                                ? "border-destructive/20 bg-card/55 text-destructive hover:bg-destructive/10"
+                                : "border-primary/18 bg-card/55 text-foreground hover:bg-primary/8 hover:text-primary",
+                            )}
+                          >
+                            {action.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-3 text-sm text-muted-foreground">
+                        Asset detail now links directly into the compatible request, operational, and review workflow for this unit.
                       </div>
                     </div>
 
@@ -469,6 +741,58 @@ function FilterSelect({
           {options.map((option) => (
             <option key={option} value={option} className="bg-[hsl(var(--card))] text-foreground">
               {getLabel ? getLabel(option) : option === "all" ? "All" : option}
+            </option>
+          ))}
+        </select>
+      </div>
+    </label>
+  );
+}
+
+function FormField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="space-y-2">
+      <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="matrix-field h-12 w-full rounded-[1.15rem] px-4 text-sm text-foreground outline-none"
+      />
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ label: string; value: string }>;
+}) {
+  return (
+    <label className="space-y-2">
+      <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">{label}</span>
+      <div className="matrix-field rounded-[1.15rem] px-4">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-12 w-full bg-transparent text-sm text-foreground outline-none"
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value} className="bg-[hsl(var(--card))] text-foreground">
+              {option.label}
             </option>
           ))}
         </select>

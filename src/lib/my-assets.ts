@@ -42,12 +42,28 @@ export type DamageRecord = {
   note: string;
 };
 
+export type HandoverRecipient = {
+  id: string;
+  fullName: string;
+  role: string;
+  homeBase: string | null;
+};
+
 export type MyAssetsWorkspaceData = {
   assignedAssets: AssignedAsset[];
   pendingItems: PendingItem[];
   damageRecords: DamageRecord[];
   source: "live" | "mixed" | "fallback";
   warnings: string[];
+};
+
+export type SubmitDamageReportInput = {
+  userId: string;
+  assetId: string;
+  assetTag: string;
+  assetName: string;
+  damageType: string;
+  description: string;
 };
 
 type LocationRow = { id: string; name: string };
@@ -216,8 +232,8 @@ function isMissingSchemaError(message: string) {
 function getActionList(status: string | null | undefined) {
   const normalized = normalizeAssetStatus(status ?? "");
   if (normalized === "damaged") return [];
-  if (normalized === "traveling") return ["Request Return"];
-  return ["Request Return", "Request Handover"];
+  if (normalized === "traveling") return ["Request Return", "Report Damage"];
+  return ["Request Return", "Request Handover", "Report Damage"];
 }
 
 function normalizeDamageStatus(status: string | null | undefined): DamageRecord["status"] {
@@ -458,4 +474,122 @@ export async function loadMyAssetsWorkspace(supabase: SupabaseClient, userId: st
     source,
     warnings,
   };
+}
+
+export async function loadHandoverRecipients(supabase: SupabaseClient, currentUserId: string) {
+  try {
+    const { data, error } = await supabase.rpc("list_settings_users");
+    if (error) throw error;
+
+    return ((data ?? []) as Array<{ id: string; full_name: string; role: string; home_base: string | null; approved: boolean; locked: boolean }>)
+      .filter((row) => row.id !== currentUserId && row.approved && !row.locked)
+      .map((row) => ({
+        id: row.id,
+        fullName: row.full_name,
+        role: row.role,
+        homeBase: row.home_base,
+      }));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Handover recipients could not be loaded.";
+    if (!isMissingSchemaError(message)) throw error;
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, display_name, surname, full_name")
+    .neq("id", currentUserId)
+    .order("full_name");
+
+  if (error) throw error;
+
+  return ((data ?? []) as Array<{ id: string; display_name: string | null; surname: string | null; full_name?: string | null }>).map((row) => ({
+    id: row.id,
+    fullName: [row.display_name?.trim(), row.surname?.trim()].filter(Boolean).join(" ") || row.full_name?.trim() || "Unknown user",
+    role: "operator",
+    homeBase: null,
+  }));
+}
+
+export async function submitHandoverRequest(
+  supabase: SupabaseClient,
+  input: {
+    fromUserId: string;
+    toUserId: string;
+    assetIds: string[];
+    notes?: string;
+  },
+) {
+  if (!input.toUserId) {
+    throw new Error("Choose the receiving user first.");
+  }
+  if (input.assetIds.length === 0) {
+    throw new Error("Choose at least one assigned asset first.");
+  }
+
+  const { data: handoverRow, error: handoverError } = await supabase
+    .from("handovers")
+    .insert({
+      from_user: input.fromUserId,
+      to_user: input.toUserId,
+      notes: input.notes?.trim() || null,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+
+  if (handoverError) throw handoverError;
+
+  const handoverId = (handoverRow as { id: string }).id;
+
+  const { error: itemsError } = await supabase.from("handover_items").insert(
+    input.assetIds.map((assetId) => ({
+      handover_id: handoverId,
+      asset_id: assetId,
+    })),
+  );
+
+  if (itemsError) throw itemsError;
+
+  return handoverId;
+}
+
+export async function submitDamageReport(supabase: SupabaseClient, input: SubmitDamageReportInput) {
+  const trimmedDamageType = input.damageType.trim();
+  const trimmedDescription = input.description.trim();
+
+  if (!trimmedDamageType) {
+    throw new Error("Choose the damage type before submitting.");
+  }
+  if (!trimmedDescription) {
+    throw new Error("Describe the damage incident before submitting.");
+  }
+
+  try {
+    const { error } = await supabase.from("damage_cases").insert({
+      asset_id: input.assetId,
+      responsible_user_id: input.userId,
+      status: "Form Pending",
+      user_statement: `${trimmedDamageType}: ${trimmedDescription}`,
+    });
+
+    if (error) throw error;
+    return { target: "damage_cases" as const };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Damage case submission failed.";
+    if (!isMissingSchemaError(message)) {
+      throw error;
+    }
+  }
+
+  const { error } = await supabase.from("damage_reports").insert({
+    assigned_to: input.userId,
+    asset_code: input.assetTag,
+    asset_name: input.assetName,
+    status: "pending",
+    damage_type: trimmedDamageType,
+    description: trimmedDescription,
+  });
+
+  if (error) throw error;
+  return { target: "damage_reports" as const };
 }

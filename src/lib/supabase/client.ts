@@ -1,12 +1,9 @@
-"use client";
+import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getSupabasePublishableKey, getSupabaseUrl, hasSupabaseEnv } from "@/lib/supabase/config";
 
 let browserClient: SupabaseClient | null = null;
-
-export function hasSupabaseEnv() {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-}
 
 export function getSupabaseBrowserClient() {
   if (!hasSupabaseEnv()) {
@@ -14,17 +11,16 @@ export function getSupabaseBrowserClient() {
   }
 
   if (!browserClient) {
-    browserClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true,
-        },
-      },
-    );
+    const url = getSupabaseUrl();
+    const key = getSupabasePublishableKey();
+    if (!url || !key) {
+      return null;
+    }
+
+    browserClient = createBrowserClient(url, key);
   }
 
   return browserClient;
 }
+
+export { hasSupabaseEnv };

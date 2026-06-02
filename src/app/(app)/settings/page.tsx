@@ -10,8 +10,13 @@ import {
   createKit,
   createLocation,
   getFallbackSettingsWorkspace,
+  loadDuplicateComparison,
+  loadSettingsKitAssetCandidates,
+  loadSettingsKitMembers,
   loadSettingsWorkspace,
+  resolveSettingsDuplicate,
   saveSettingsConfig,
+  saveSettingsKitMembers,
   saveSettingsUser,
   setConsumableActiveState,
   setDepartmentActiveState,
@@ -21,10 +26,15 @@ import {
   type SettingsConfigRecord,
   type SettingsConsumableRecord,
   type SettingsDepartmentRecord,
+  type DuplicateComparison,
+  type SettingsKitAssetCandidateRecord,
+  type SettingsKitMemberRecord,
   type SettingsKitRecord,
   type SettingsLocationRecord,
   type SettingsWorkspaceData,
 } from "@/lib/settings";
+import { buildCsv, exportPdfReport, exportXlsxReport, loadReportWorkspace, type ReportType, type ReportWorkspace } from "@/lib/reports";
+import { generateQrExportPdf, loadQrExportAssets, type QrExportAsset } from "@/lib/qr-export";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -61,10 +71,13 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
   const [feedback, setFeedback] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(null);
-  const [busyAction, setBusyAction] = useState<"profile" | "user" | "location" | "department" | "kit" | "consumable" | "config" | null>(null);
+  const [busyAction, setBusyAction] = useState<"profile" | "user" | "location" | "department" | "kit" | "consumable" | "config" | "duplicate" | null>(null);
   const [profileDisplayName, setProfileDisplayName] = useState("");
   const [profileSurname, setProfileSurname] = useState("");
   const [profileDirty, setProfileDirty] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState("all");
+  const [userAccessFilter, setUserAccessFilter] = useState("all");
   const [newLocationName, setNewLocationName] = useState("");
   const [newLocationIsHomeBase, setNewLocationIsHomeBase] = useState(true);
   const [newDepartmentName, setNewDepartmentName] = useState("");
@@ -77,6 +90,19 @@ export default function SettingsPage() {
   const [newKitName, setNewKitName] = useState("");
   const [newKitHomeBase, setNewKitHomeBase] = useState("");
   const [newKitItemCount, setNewKitItemCount] = useState("0");
+  const [selectedKitId, setSelectedKitId] = useState("");
+  const [kitMembers, setKitMembers] = useState<SettingsKitMemberRecord[]>([]);
+  const [kitMembersSource, setKitMembersSource] = useState<"live" | "fallback">("fallback");
+  const [kitMemberWarnings, setKitMemberWarnings] = useState<string[]>([]);
+  const [kitMemberDraftIds, setKitMemberDraftIds] = useState<string[]>([]);
+  const [kitMemberDraftDirty, setKitMemberDraftDirty] = useState(false);
+  const [kitMemberRefreshTick, setKitMemberRefreshTick] = useState(0);
+  const [kitAssetCandidates, setKitAssetCandidates] = useState<SettingsKitAssetCandidateRecord[]>([]);
+  const [kitAssetCandidatesSource, setKitAssetCandidatesSource] = useState<"live" | "fallback">("fallback");
+  const [kitAssetCandidateWarnings, setKitAssetCandidateWarnings] = useState<string[]>([]);
+  const [kitAssetSearch, setKitAssetSearch] = useState("");
+  const [loadingKitMembers, setLoadingKitMembers] = useState(false);
+  const [loadingKitAssets, setLoadingKitAssets] = useState(false);
   const [newConsumableName, setNewConsumableName] = useState("");
   const [newConsumableDepartment, setNewConsumableDepartment] = useState("");
   const [newConsumableUnit, setNewConsumableUnit] = useState("");
@@ -86,6 +112,25 @@ export default function SettingsPage() {
   const [qrExportPageBorderMm, setQrExportPageBorderMm] = useState("5");
   const [qrExportFormat, setQrExportFormat] = useState("A4");
   const [qrExportDirty, setQrExportDirty] = useState(false);
+  const [reportType, setReportType] = useState<ReportType>("damage");
+  const [reportLocationId, setReportLocationId] = useState("");
+  const [reportWorkspace, setReportWorkspace] = useState<ReportWorkspace>({ columns: [], rows: [], source: "fallback", warnings: [] });
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [reportRefreshTick, setReportRefreshTick] = useState(0);
+  const [selectedDuplicateId, setSelectedDuplicateId] = useState("");
+  const [duplicateComparison, setDuplicateComparison] = useState<DuplicateComparison | null>(null);
+  const [loadingDuplicateComparison, setLoadingDuplicateComparison] = useState(false);
+  const [duplicateResolutionStatus, setDuplicateResolutionStatus] = useState<"Merged" | "Not Duplicate">("Merged");
+  const [duplicateSurvivor, setDuplicateSurvivor] = useState<"primary" | "duplicate">("primary");
+  const [duplicateNote, setDuplicateNote] = useState("");
+  const [qrFilterSearch, setQrFilterSearch] = useState("");
+  const [qrFilterLocationId, setQrFilterLocationId] = useState("");
+  const [qrFilterDepartmentId, setQrFilterDepartmentId] = useState("");
+  const [qrFilterStatus, setQrFilterStatus] = useState("");
+  const [qrCreatedFrom, setQrCreatedFrom] = useState("");
+  const [qrCreatedTo, setQrCreatedTo] = useState("");
+  const [qrPreviewAssets, setQrPreviewAssets] = useState<QrExportAsset[]>([]);
+  const [loadingQrPreview, setLoadingQrPreview] = useState(false);
 
   const visibleTabs = useMemo(
     () => tabs.filter((tab) => tab.show(isAdmin, isAssetManager)),
@@ -103,8 +148,11 @@ export default function SettingsPage() {
           : "Volunteer";
 
   const homeBaseName = useMemo(
-    () => workspace.locations.find((location) => location.id === assignedLocationId)?.name ?? workspace.users.find((entry) => entry.email === user?.email)?.home_base ?? "No home base assigned",
-    [assignedLocationId, user?.email, workspace.locations, workspace.users],
+    () =>
+      workspace.locations.find((location) => location.id === assignedLocationId)?.name ??
+      workspace.locations.find((location) => location.id === assetManagerLocationId)?.name ??
+      "No home base assigned",
+    [assignedLocationId, assetManagerLocationId, workspace.locations],
   );
   const profileNameParts = useMemo(() => (profileName || "").trim().split(/\s+/).filter(Boolean), [profileName]);
   const resolvedProfileDisplayName = profileDirty ? profileDisplayName : (profileNameParts[0] ?? "");
@@ -115,9 +163,62 @@ export default function SettingsPage() {
     if (!managerLocationName) return workspace.users;
     return workspace.users.filter((entry) => entry.home_base === managerLocationName);
   }, [assetManagerLocationId, isAdmin, workspace.locations, workspace.users]);
+  const roleSummaryRows = useMemo(
+    () => [
+      {
+        role: "admin",
+        label: "Admin",
+        count: visibleUsers.filter((entry) => entry.role === "admin" || entry.role === "main_admin").length,
+        capability: "Cross-location admin, approvals, settings, and reporting.",
+        locationRule: "Not location-locked.",
+      },
+      {
+        role: "asset_manager",
+        label: "Asset Manager",
+        count: visibleUsers.filter((entry) => entry.role === "asset_manager").length,
+        capability: "One-location operational control across check-out/in and approvals.",
+        locationRule: "Locked to assigned manager location.",
+      },
+      {
+        role: "staff",
+        label: "Staff",
+        count: visibleUsers.filter((entry) => entry.role === "staff").length,
+        capability: "Inventory browse plus request workflows.",
+        locationRule: "Can browse broad scope, then submit per explicit source location.",
+      },
+      {
+        role: "volunteer",
+        label: "Volunteer",
+        count: visibleUsers.filter((entry) => entry.role === "volunteer").length,
+        capability: "Assigned items, pending responses, returns, and personal damage actions.",
+        locationRule: "Locked to assigned location where applicable.",
+      },
+    ],
+    [visibleUsers],
+  );
+  const filteredUsers = useMemo(() => {
+    const search = userSearch.trim().toLowerCase();
+
+    return visibleUsers.filter((entry) => {
+      const matchesSearch =
+        !search ||
+        [entry.full_name, entry.email, entry.home_base, entry.department, entry.role]
+          .filter(Boolean)
+          .some((value) => value?.toLowerCase().includes(search));
+      const matchesRole = userRoleFilter === "all" || entry.role === userRoleFilter;
+      const matchesAccess =
+        userAccessFilter === "all" ||
+        (userAccessFilter === "approved" && entry.approved) ||
+        (userAccessFilter === "pending" && !entry.approved) ||
+        (userAccessFilter === "locked" && entry.locked) ||
+        (userAccessFilter === "active" && entry.approved && !entry.locked);
+
+      return matchesSearch && matchesRole && matchesAccess;
+    });
+  }, [userAccessFilter, userRoleFilter, userSearch, visibleUsers]);
   const selectedUser = useMemo(
-    () => visibleUsers.find((entry) => entry.id === (selectedUserId || visibleUsers[0]?.id)) ?? null,
-    [selectedUserId, visibleUsers],
+    () => filteredUsers.find((entry) => entry.id === (selectedUserId || filteredUsers[0]?.id)) ?? null,
+    [filteredUsers, selectedUserId],
   );
   const selectedUserHomeBaseId = useMemo(() => {
     if (!selectedUser?.home_base) return "";
@@ -142,6 +243,80 @@ export default function SettingsPage() {
   const resolvedQrExportLabelMm = qrExportDirty ? qrExportLabelMm : qrExportDefaults.labelMm;
   const resolvedQrExportPageBorderMm = qrExportDirty ? qrExportPageBorderMm : qrExportDefaults.pageBorderMm;
   const resolvedQrExportFormat = qrExportDirty ? qrExportFormat : qrExportDefaults.format;
+  const resolvedReportLocationId = reportLocationId || "";
+  const selectedDuplicate = useMemo(
+    () => workspace.duplicates.find((entry) => entry.id === (selectedDuplicateId || workspace.duplicates[0]?.id)) ?? null,
+    [selectedDuplicateId, workspace.duplicates],
+  );
+  const selectedKit = useMemo(
+    () => workspace.kits.find((entry) => entry.id === (selectedKitId || workspace.kits[0]?.id)) ?? null,
+    [selectedKitId, workspace.kits],
+  );
+  const resolvedKitMemberIds = useMemo(
+    () => (kitMemberDraftDirty ? kitMemberDraftIds : kitMembers.map((entry) => entry.asset_id)),
+    [kitMemberDraftDirty, kitMemberDraftIds, kitMembers],
+  );
+  const mergedKitAssetMap = useMemo(() => {
+    const rows = new Map<
+      string,
+      {
+        asset_id: string;
+        asset_code: string;
+        asset_name: string;
+        serial_number: string | null;
+        status: string;
+        current_location: string | null;
+        department: string | null;
+      }
+    >();
+
+    for (const asset of kitAssetCandidates) {
+      rows.set(asset.asset_id, asset);
+    }
+    for (const member of kitMembers) {
+      rows.set(member.asset_id, {
+        asset_id: member.asset_id,
+        asset_code: member.asset_code,
+        asset_name: member.asset_name,
+        serial_number: member.serial_number,
+        status: member.status,
+        current_location: member.current_location,
+        department: member.department,
+      });
+    }
+
+    return rows;
+  }, [kitAssetCandidates, kitMembers]);
+  const selectedKitMemberAssets = useMemo(
+    () =>
+      resolvedKitMemberIds.map((assetId, index) => {
+        const asset = mergedKitAssetMap.get(assetId);
+        return {
+          asset_id: assetId,
+          asset_code: asset?.asset_code ?? "No tag",
+          asset_name: asset?.asset_name ?? "Unnamed asset",
+          serial_number: asset?.serial_number ?? null,
+          status: asset?.status ?? "unknown",
+          current_location: asset?.current_location ?? "No location",
+          department: asset?.department ?? "No department",
+          sort_order: index + 1,
+        };
+      }),
+    [mergedKitAssetMap, resolvedKitMemberIds],
+  );
+  const filteredKitAssetCandidates = useMemo(() => {
+    const search = kitAssetSearch.trim().toLowerCase();
+    const selectedIds = new Set(resolvedKitMemberIds);
+
+    return kitAssetCandidates
+      .filter((asset) => !selectedIds.has(asset.asset_id))
+      .filter((asset) => {
+        if (!search) return true;
+        return [asset.asset_code, asset.asset_name, asset.serial_number, asset.current_location, asset.department, asset.status]
+          .filter(Boolean)
+          .some((value) => value?.toLowerCase().includes(search));
+      });
+  }, [kitAssetCandidates, kitAssetSearch, resolvedKitMemberIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,6 +356,227 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [isConfigured, user]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadReports = async () => {
+      if (activeTab !== "reports" || !isAdmin) return;
+
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        if (!cancelled) {
+          setReportWorkspace({ columns: [], rows: [], source: "fallback", warnings: ["Supabase is not configured yet, so reports export is unavailable."] });
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setLoadingReports(true);
+      }
+
+      try {
+        const nextWorkspace = await loadReportWorkspace(supabase, {
+          type: reportType,
+          locationId: resolvedReportLocationId || null,
+        });
+        if (!cancelled) {
+          setReportWorkspace(nextWorkspace);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Report workspace could not be loaded.";
+        if (!cancelled) {
+          setReportWorkspace({ columns: [], rows: [], source: "fallback", warnings: [message] });
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingReports(false);
+        }
+      }
+    };
+
+    void loadReports();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, isAdmin, reportRefreshTick, reportType, resolvedReportLocationId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadComparison = async () => {
+      if (activeTab !== "duplicates" || !selectedDuplicate) return;
+
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        if (!cancelled) {
+          setDuplicateComparison(null);
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setLoadingDuplicateComparison(true);
+      }
+
+      try {
+        const nextComparison = await loadDuplicateComparison(supabase, selectedDuplicate);
+        if (!cancelled) {
+          setDuplicateComparison(nextComparison);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Duplicate comparison could not be loaded.";
+        if (!cancelled) {
+          setDuplicateComparison({
+            primary: null,
+            duplicate: null,
+            source: "fallback",
+            warnings: [message],
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingDuplicateComparison(false);
+        }
+      }
+    };
+
+    void loadComparison();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, selectedDuplicate]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadKitAssets = async () => {
+      if (activeTab !== "kits" || !isAdmin) return;
+
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        if (!cancelled) {
+          setKitAssetCandidates([]);
+          setKitAssetCandidatesSource("fallback");
+          setKitAssetCandidateWarnings(["Supabase is not configured yet, so kit asset candidates are unavailable."]);
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setLoadingKitAssets(true);
+      }
+
+      try {
+        const nextAssets = await loadSettingsKitAssetCandidates(supabase);
+        if (!cancelled) {
+          setKitAssetCandidates(nextAssets.assets);
+          setKitAssetCandidatesSource(nextAssets.source);
+          setKitAssetCandidateWarnings(nextAssets.warnings);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Kit asset candidates could not be loaded.";
+        if (!cancelled) {
+          setKitAssetCandidates([]);
+          setKitAssetCandidatesSource("fallback");
+          setKitAssetCandidateWarnings([message]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingKitAssets(false);
+        }
+      }
+    };
+
+    void loadKitAssets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, isAdmin]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadKitMembersForSelectedKit = async () => {
+      if (activeTab !== "kits" || !selectedKit) return;
+
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        if (!cancelled) {
+          setKitMembers([]);
+          setKitMembersSource("fallback");
+          setKitMemberWarnings(["Supabase is not configured yet, so kit membership is unavailable."]);
+          setKitMemberDraftIds([]);
+          setKitMemberDraftDirty(false);
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setLoadingKitMembers(true);
+      }
+
+      try {
+        const nextMembers = await loadSettingsKitMembers(supabase, selectedKit.id);
+        if (!cancelled) {
+          setKitMembers(nextMembers.members);
+          setKitMembersSource(nextMembers.source);
+          setKitMemberWarnings(nextMembers.warnings);
+          setKitMemberDraftIds(nextMembers.members.map((entry) => entry.asset_id));
+          setKitMemberDraftDirty(false);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Kit membership could not be loaded.";
+        if (!cancelled) {
+          setKitMembers([]);
+          setKitMembersSource("fallback");
+          setKitMemberWarnings([message]);
+          setKitMemberDraftIds([]);
+          setKitMemberDraftDirty(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingKitMembers(false);
+        }
+      }
+    };
+
+    void loadKitMembersForSelectedKit();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, kitMemberRefreshTick, selectedKit]);
+
+  const loadQrPreview = async () => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setFeedback({ tone: "error", message: "Supabase is not configured yet, so QR export is unavailable." });
+      return;
+    }
+
+    setLoadingQrPreview(true);
+    try {
+      const rows = await loadQrExportAssets(supabase, {
+        search: qrFilterSearch,
+        locationId: qrFilterLocationId || null,
+        departmentId: qrFilterDepartmentId || null,
+        status: qrFilterStatus || null,
+        createdFrom: qrCreatedFrom || null,
+        createdTo: qrCreatedTo || null,
+      });
+      setQrPreviewAssets(rows);
+      setFeedback({ tone: "success", message: `QR export preview loaded with ${rows.length} asset${rows.length === 1 ? "" : "s"}.` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "QR export preview could not be loaded.";
+      setFeedback({ tone: "error", message });
+    } finally {
+      setLoadingQrPreview(false);
+    }
+  };
 
   const refreshWorkspace = async () => {
     if (!isConfigured || !user) {
@@ -419,7 +815,7 @@ export default function SettingsPage() {
 
     setBusyAction("kit");
     try {
-      const { error } = await createKit(supabase, {
+      const { data, error } = await createKit(supabase, {
         name: newKitName,
         homeBase: newKitHomeBase,
         itemCount,
@@ -442,6 +838,7 @@ export default function SettingsPage() {
       setNewKitName("");
       setNewKitHomeBase("");
       setNewKitItemCount("0");
+      setSelectedKitId(typeof data?.id === "string" ? data.id : optimisticRow.id);
       setFeedback({ tone: "success", message: "Kit definition created." });
       await refreshWorkspace();
     } catch (error) {
@@ -476,6 +873,66 @@ export default function SettingsPage() {
       await refreshWorkspace();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Kit update failed.";
+      setFeedback({ tone: "error", message });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const addAssetToKitDraft = (assetId: string) => {
+    const currentIds = kitMemberDraftDirty ? kitMemberDraftIds : kitMembers.map((entry) => entry.asset_id);
+    if (currentIds.includes(assetId)) return;
+
+    setKitMemberDraftIds([...currentIds, assetId]);
+    setKitMemberDraftDirty(true);
+  };
+
+  const removeAssetFromKitDraft = (assetId: string) => {
+    const currentIds = kitMemberDraftDirty ? kitMemberDraftIds : kitMembers.map((entry) => entry.asset_id);
+    setKitMemberDraftIds(currentIds.filter((entry) => entry !== assetId));
+    setKitMemberDraftDirty(true);
+  };
+
+  const resetKitDraft = () => {
+    setKitMemberDraftIds(kitMembers.map((entry) => entry.asset_id));
+    setKitMemberDraftDirty(false);
+  };
+
+  const saveKitMembership = async () => {
+    if (!selectedKit) {
+      setFeedback({ tone: "error", message: "Choose a kit first." });
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setFeedback({ tone: "error", message: "Supabase is not configured yet, so kit membership updates are unavailable." });
+      return;
+    }
+
+    setBusyAction("kit");
+    try {
+      const assetIds = [...resolvedKitMemberIds];
+      const { error } = await saveSettingsKitMembers(supabase, {
+        kitId: selectedKit.id,
+        assetIds,
+      });
+
+      if (error) throw error;
+
+      setWorkspace((current) => ({
+        ...current,
+        kits: current.kits.map((entry) => (entry.id === selectedKit.id ? { ...entry, item_count: assetIds.length } : entry)),
+      }));
+      setKitMemberDraftDirty(false);
+      setFeedback({
+        tone: "success",
+        message: `${selectedKit.name} membership saved with ${assetIds.length} asset${assetIds.length === 1 ? "" : "s"}.`,
+      });
+      setKitMemberRefreshTick((current) => current + 1);
+      await refreshWorkspace();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Kit membership save failed.";
       setFeedback({ tone: "error", message });
     } finally {
       setBusyAction(null);
@@ -587,7 +1044,7 @@ export default function SettingsPage() {
       return;
     }
 
-    setBusyAction("config");
+    setBusyAction("duplicate");
     try {
       const value = {
         labelMm,
@@ -620,6 +1077,138 @@ export default function SettingsPage() {
       await refreshWorkspace();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Config save failed.";
+      setFeedback({ tone: "error", message });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const exportCurrentReportCsv = () => {
+    if (reportWorkspace.rows.length === 0 || reportWorkspace.columns.length === 0) {
+      setFeedback({ tone: "error", message: "Load report rows before exporting CSV." });
+      return;
+    }
+
+    const csv = buildCsv(reportWorkspace.columns, reportWorkspace.rows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `assets-${reportType}-${resolvedReportLocationId || "all-locations"}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setFeedback({ tone: "success", message: "CSV export generated for the current report view." });
+  };
+
+  const exportCurrentReportXlsx = () => {
+    if (reportWorkspace.rows.length === 0 || reportWorkspace.columns.length === 0) {
+      setFeedback({ tone: "error", message: "Load report rows before exporting XLSX." });
+      return;
+    }
+
+    exportXlsxReport(`assets-${reportType}-${resolvedReportLocationId || "all-locations"}.xlsx`, reportWorkspace.columns, reportWorkspace.rows);
+    setFeedback({ tone: "success", message: "XLSX export generated for the current report view." });
+  };
+
+  const exportCurrentReportPdf = () => {
+    if (reportWorkspace.rows.length === 0 || reportWorkspace.columns.length === 0) {
+      setFeedback({ tone: "error", message: "Load report rows before exporting PDF." });
+      return;
+    }
+
+    exportPdfReport(
+      `assets-${reportType}-${resolvedReportLocationId || "all-locations"}.pdf`,
+      `Assets ${reportType.replaceAll("_", " ")} report`,
+      reportWorkspace.columns,
+      reportWorkspace.rows,
+    );
+    setFeedback({ tone: "success", message: "PDF export generated for the current report view." });
+  };
+
+  const submitDuplicateResolution = async () => {
+    if (!selectedDuplicate) {
+      setFeedback({ tone: "error", message: "Choose a duplicate pair first." });
+      return;
+    }
+    if (!duplicateNote.trim()) {
+      setFeedback({ tone: "error", message: "Merge note is required." });
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setFeedback({ tone: "error", message: "Supabase is not configured yet, so duplicate resolution is unavailable." });
+      return;
+    }
+
+    setBusyAction("config");
+    try {
+      const survivorAsset =
+        duplicateResolutionStatus === "Merged"
+          ? duplicateSurvivor === "primary"
+            ? selectedDuplicate.primary_asset
+            : selectedDuplicate.duplicate_asset
+          : null;
+
+      const result = await resolveSettingsDuplicate(supabase, {
+        duplicateId: selectedDuplicate.id,
+        status: duplicateResolutionStatus,
+        survivorAsset,
+        note: duplicateNote,
+      });
+
+      if (result.error) throw result.error;
+
+      setWorkspace((current) => ({
+        ...current,
+        duplicates: current.duplicates.map((entry) =>
+          entry.id === selectedDuplicate.id
+            ? {
+                ...entry,
+                status: duplicateResolutionStatus,
+                notes: duplicateNote,
+              }
+            : entry,
+        ),
+      }));
+      setFeedback({
+        tone: "success",
+        message: result.previewOnly
+          ? "Duplicate resolution saved in the local review surface. Backend merge RPC is still missing."
+          : `Duplicate pair marked as ${duplicateResolutionStatus}.`,
+      });
+      setDuplicateNote("");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Duplicate resolution failed.";
+      setFeedback({ tone: "error", message });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const exportQrSheetPdf = async () => {
+    if (qrPreviewAssets.length === 0) {
+      setFeedback({ tone: "error", message: "Load QR export assets before generating the PDF sheet." });
+      return;
+    }
+
+    const labelMm = Number.parseInt(resolvedQrExportLabelMm, 10);
+    const pageBorderMm = Number.parseInt(resolvedQrExportPageBorderMm, 10);
+
+    if (Number.isNaN(labelMm) || Number.isNaN(pageBorderMm) || labelMm <= 0 || pageBorderMm < 0) {
+      setFeedback({ tone: "error", message: "Enter valid QR label and page-border values first." });
+      return;
+    }
+
+    setBusyAction("config");
+    try {
+      await generateQrExportPdf(qrPreviewAssets, {
+        labelMm,
+        pageBorderMm,
+      });
+      setFeedback({ tone: "success", message: "QR sheet PDF generated from the current filtered asset set." });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "QR PDF generation failed.";
       setFeedback({ tone: "error", message });
     } finally {
       setBusyAction(null);
@@ -765,14 +1354,47 @@ export default function SettingsPage() {
                     }
                     rows={[]}
                   />
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <FieldCard label="Visible users" value={String(filteredUsers.length)} />
+                    <FieldCard label="Approved" value={String(visibleUsers.filter((entry) => entry.approved).length)} />
+                    <FieldCard label="Pending" value={String(visibleUsers.filter((entry) => !entry.approved).length)} />
+                    <FieldCard label="Locked" value={String(visibleUsers.filter((entry) => entry.locked).length)} />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <TextField label="Search users" value={userSearch} onChange={setUserSearch} placeholder="Name, email, role, home base..." />
+                    <SelectTextField
+                      label="Role filter"
+                      value={userRoleFilter}
+                      onChange={setUserRoleFilter}
+                      options={[
+                        { label: "All roles", value: "all" },
+                        { label: "Admin", value: "admin" },
+                        { label: "Asset Manager", value: "asset_manager" },
+                        { label: "Staff", value: "staff" },
+                        { label: "Volunteer", value: "volunteer" },
+                      ]}
+                    />
+                    <SelectTextField
+                      label="Access filter"
+                      value={userAccessFilter}
+                      onChange={setUserAccessFilter}
+                      options={[
+                        { label: "All access states", value: "all" },
+                        { label: "Approved", value: "approved" },
+                        { label: "Pending approval", value: "pending" },
+                        { label: "Locked", value: "locked" },
+                        { label: "Active", value: "active" },
+                      ]}
+                    />
+                  </div>
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
                     <div className="space-y-2">
-                      {visibleUsers.length === 0 ? (
+                      {filteredUsers.length === 0 ? (
                         <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-10 text-center text-sm text-muted-foreground">
-                          No users available in this scope.
+                          No users match the current filters.
                         </div>
                       ) : (
-                        visibleUsers.map((entry) => (
+                        filteredUsers.map((entry) => (
                           <button
                             key={entry.id}
                             type="button"
@@ -786,7 +1408,9 @@ export default function SettingsPage() {
                             )}
                           >
                             <span className="text-sm font-medium">{entry.full_name}</span>
-                            <span className="text-sm text-muted-foreground">{entry.role} | {entry.home_base ?? "No home base"} | {entry.locked ? "Locked" : "Active"}</span>
+                            <span className="text-sm text-muted-foreground">
+                              {entry.role} | {entry.home_base ?? "No home base"} | {entry.locked ? "Locked" : entry.approved ? "Approved" : "Pending approval"}
+                            </span>
                           </button>
                         ))
                       )}
@@ -844,6 +1468,8 @@ export default function SettingsPage() {
                           <div className="grid gap-3 sm:grid-cols-2">
                             <FieldCard label="Email" value={selectedUser.email} />
                             <FieldCard label="Access state" value={selectedUser.approved ? "Approved" : "Pending approval"} />
+                            <FieldCard label="Lock state" value={selectedUser.locked ? "Locked" : "Unlocked"} />
+                            <FieldCard label="Department" value={selectedUser.department ?? "No department"} />
                           </div>
                           <button
                             type="button"
@@ -864,11 +1490,42 @@ export default function SettingsPage() {
                 </div>
               )}
               {activeTab === "roles" && (
-                <DataSection
-                  title="Roles"
-                  body="Roles remain fixed system roles in v1. There is no custom role or permission editor in the new baseline."
-                  rows={["Admin | full operational access", "Asset Manager | one-location operations", "Staff | requests + inventory browse", "Volunteer | assigned-items only"]}
-                />
+                <div className="space-y-4">
+                  <DataSection
+                    title="Roles"
+                    body="Roles remain fixed system roles in the current baseline, but this tab now summarizes live role distribution and the operational boundaries those roles map to."
+                    rows={[]}
+                  />
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {roleSummaryRows.map((row) => (
+                      <div key={row.role} className="rounded-[1rem] border border-primary/12 bg-card/45 px-4 py-4">
+                        <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{row.label}</div>
+                        <div className="mt-2 font-display text-3xl text-foreground glow-soft">{row.count}</div>
+                        <div className="mt-2 text-sm text-muted-foreground">{row.locationRule}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid gap-3 xl:grid-cols-2">
+                    {roleSummaryRows.map((row) => (
+                      <div key={`${row.role}-detail`} className="rounded-[1rem] border border-primary/12 bg-card/45 px-4 py-4">
+                        <div className="font-display text-xl text-foreground glow-soft">{row.label}</div>
+                        <div className="mt-2 text-sm text-muted-foreground">{row.capability}</div>
+                        <div className="mt-2 text-sm text-muted-foreground">{row.locationRule}</div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab("users");
+                            setUserRoleFilter(row.role);
+                            setUserAccessFilter("all");
+                          }}
+                          className="mt-4 inline-flex h-10 items-center justify-center rounded-[0.9rem] border border-primary/18 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary"
+                        >
+                          View {row.label} Users
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
               {activeTab === "locations" && (
                 <div className="space-y-4">
@@ -940,13 +1597,13 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <DataSection
                     title="Kits"
-                    body="Kits remains the saved kit builder and lifecycle workspace for create, edit, and retire actions. This first write-side pass supports creating kit definitions plus retire/re-enable state changes."
+                    body="Kits is now the saved-kit definition workspace for create, membership editing, and retire/re-enable lifecycle actions. Sunday Kits deployments can use these saved members as the source list when the membership schema is available."
                     rows={[]}
                   />
                   <div className="grid gap-3 sm:grid-cols-2">
                     <TextField label="Kit name" value={newKitName} onChange={setNewKitName} placeholder="Sunday Camera Kit" />
                     <TextField label="Home base" value={newKitHomeBase} onChange={setNewKitHomeBase} placeholder="Centurion" />
-                    <NumberTextField label="Item count" value={newKitItemCount} onChange={setNewKitItemCount} />
+                    <NumberTextField label="Legacy fallback count" value={newKitItemCount} onChange={setNewKitItemCount} />
                   </div>
                   <button
                     type="button"
@@ -958,18 +1615,123 @@ export default function SettingsPage() {
                   </button>
                   <div className="space-y-2">
                     {workspace.kits.map((entry) => (
-                      <ActionRow
+                      <div
                         key={entry.id}
-                        title={entry.name}
-                        meta={`${entry.home_base ?? "No home base"} | ${entry.item_count} item${entry.item_count === 1 ? "" : "s"} | ${entry.active ? "Active" : "Inactive"}`}
-                        actionLabel={entry.active ? "Retire" : "Enable"}
-                        onAction={() => void toggleKitActive(entry)}
-                        disabled={busyAction !== null}
-                      />
+                        className={cn(
+                          "flex flex-col gap-3 rounded-[1rem] border px-4 py-4 sm:flex-row sm:items-center sm:justify-between",
+                          entry.id === (selectedKit?.id ?? "") ? "border-primary/24 bg-primary/10" : "border-primary/12 bg-card/45",
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setSelectedKitId(entry.id)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <div className="text-sm font-medium text-foreground">{entry.name}</div>
+                          <div className="mt-1 text-sm text-muted-foreground">
+                            {entry.home_base ?? "No home base"} | {entry.item_count} item{entry.item_count === 1 ? "" : "s"} | {entry.active ? "Active" : "Inactive"}
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void toggleKitActive(entry)}
+                          disabled={busyAction !== null}
+                          className="inline-flex h-10 items-center justify-center rounded-[0.9rem] border border-primary/18 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {entry.active ? "Retire" : "Enable"}
+                        </button>
+                      </div>
                     ))}
                   </div>
-                  <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4 text-sm text-muted-foreground">
-                    Item-level kit membership editing is still deferred. This pass focuses on real saved-kit definition lifecycle so the Sunday Kits deployment flow has a maintainable source list.
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                    <div className="space-y-3">
+                      <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
+                        <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Selected kit</div>
+                        <div className="mt-2 text-sm text-foreground">
+                          {selectedKit ? `${selectedKit.name} | ${resolvedKitMemberIds.length} saved asset${resolvedKitMemberIds.length === 1 ? "" : "s"}` : "Choose a kit to edit membership."}
+                        </div>
+                        <div className="mt-2 text-sm text-muted-foreground">
+                          Source: {kitMembersSource === "live" ? "Live membership" : "Fallback membership"} | Asset pool: {kitAssetCandidatesSource === "live" ? "Live assets" : "Fallback assets"}
+                        </div>
+                      </div>
+
+                      {kitMemberWarnings.concat(kitAssetCandidateWarnings).length > 0 && (
+                        <div className="rounded-[1.2rem] border border-amber-500/20 bg-amber-500/8 px-4 py-4 text-sm text-amber-100/85">
+                          <div className="space-y-1">
+                            {kitMemberWarnings.concat(kitAssetCandidateWarnings).map((warning, index) => (
+                              <div key={`${warning}-${index}`}>{warning}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => void saveKitMembership()}
+                          disabled={busyAction !== null || !selectedKit}
+                          className="matrix-button inline-flex h-11 items-center justify-center rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {busyAction === "kit" ? "Saving Kit" : "Save Membership"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={resetKitDraft}
+                          disabled={busyAction !== null || !kitMemberDraftDirty}
+                          className="inline-flex h-11 items-center justify-center rounded-[1rem] border border-primary/18 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Reset Draft
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        {loadingKitMembers ? (
+                          <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-10 text-center text-sm text-muted-foreground">
+                            Loading saved kit membership...
+                          </div>
+                        ) : selectedKitMemberAssets.length === 0 ? (
+                          <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-10 text-center text-sm text-muted-foreground">
+                            No saved kit members yet. Add assets from the pool on the right.
+                          </div>
+                        ) : (
+                          selectedKitMemberAssets.map((asset) => (
+                            <KitAssetRow
+                              key={`${selectedKit?.id ?? "kit"}-${asset.asset_id}`}
+                              title={asset.asset_name}
+                              meta={`${asset.asset_code} | ${asset.current_location ?? "No location"} | ${asset.department ?? "No department"} | ${asset.status}`}
+                              actionLabel="Remove"
+                              onAction={() => removeAssetFromKitDraft(asset.asset_id)}
+                              disabled={busyAction !== null}
+                            />
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <TextField label="Search asset pool" value={kitAssetSearch} onChange={setKitAssetSearch} placeholder="Tag, name, location, department..." />
+                      <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 px-4 py-3 text-sm text-muted-foreground">
+                        {loadingKitAssets ? "Loading asset pool..." : `${filteredKitAssetCandidates.length} asset${filteredKitAssetCandidates.length === 1 ? "" : "s"} available to add to this kit.`}
+                      </div>
+                      <div className="space-y-2">
+                        {filteredKitAssetCandidates.length === 0 ? (
+                          <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-10 text-center text-sm text-muted-foreground">
+                            No matching assets remain in the pool.
+                          </div>
+                        ) : (
+                          filteredKitAssetCandidates.map((asset) => (
+                            <KitAssetRow
+                              key={asset.asset_id}
+                              title={asset.asset_name}
+                              meta={`${asset.asset_code} | ${asset.current_location ?? "No location"} | ${asset.department ?? "No department"} | ${asset.status}`}
+                              actionLabel="Add"
+                              onAction={() => addAssetToKitDraft(asset.asset_id)}
+                              disabled={busyAction !== null || !selectedKit}
+                            />
+                          ))
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1010,18 +1772,213 @@ export default function SettingsPage() {
                 </div>
               )}
               {activeTab === "reports" && (
-                <DataSection
-                  title="Reports"
-                  body="Reports remains the filtered report/export workspace for damage reports, asset history, and accountability history, with CSV, XLSX, and PDF export targets."
-                  rows={["Damage reports | export pending", "Asset history | export pending", "Accountability history | export pending"]}
-                />
+                <div className="space-y-4">
+                  <DataSection
+                    title="Reports"
+                    body="Reports is now a real filtered workspace for damage, asset-history, and accountability views. This pass adds live rows plus CSV export from the current filtered view."
+                    rows={[]}
+                  />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <SelectTextField
+                      label="Report type"
+                      value={reportType}
+                      onChange={(value) => setReportType(value as ReportType)}
+                      options={[
+                        { label: "Damage reports", value: "damage" },
+                        { label: "Asset history", value: "asset_history" },
+                        { label: "Accountability history", value: "accountability" },
+                      ]}
+                    />
+                    <SelectTextField
+                      label="Location filter"
+                      value={resolvedReportLocationId}
+                      onChange={setReportLocationId}
+                      options={[
+                        { label: "All locations", value: "" },
+                        ...workspace.locations.map((location) => ({ label: location.name, value: location.id })),
+                      ]}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setReportRefreshTick((current) => current + 1)}
+                      disabled={loadingReports}
+                      className="inline-flex h-11 items-center justify-center rounded-[1rem] border border-primary/18 bg-card/55 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {loadingReports ? "Refreshing Report" : "Refresh Report"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={exportCurrentReportCsv}
+                      disabled={loadingReports || reportWorkspace.rows.length === 0}
+                      className="matrix-button inline-flex h-11 items-center justify-center rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Export CSV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={exportCurrentReportXlsx}
+                      disabled={loadingReports || reportWorkspace.rows.length === 0}
+                      className="inline-flex h-11 items-center justify-center rounded-[1rem] border border-primary/18 bg-card/55 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Export XLSX
+                    </button>
+                    <button
+                      type="button"
+                      onClick={exportCurrentReportPdf}
+                      disabled={loadingReports || reportWorkspace.rows.length === 0}
+                      className="inline-flex h-11 items-center justify-center rounded-[1rem] border border-primary/18 bg-card/55 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Export PDF
+                    </button>
+                  </div>
+                  <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 px-4 py-4 text-sm text-muted-foreground">
+                    Filtered report export is now available as CSV, XLSX, and PDF from the same live report surface.
+                  </div>
+                  {reportWorkspace.warnings.length > 0 && (
+                    <div className="rounded-[1.2rem] border border-amber-500/20 bg-amber-500/8 px-4 py-4 text-sm text-amber-100/85">
+                      {reportWorkspace.warnings.map((warning) => (
+                        <div key={warning}>{warning}</div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Current report rows</div>
+                      <div className="text-xs text-muted-foreground">
+                        {reportWorkspace.source === "live" ? "Live data" : "Fallback/legacy surface"} | {reportWorkspace.rows.length} rows
+                      </div>
+                    </div>
+                    {reportWorkspace.columns.length === 0 ? (
+                      <div className="mt-4 rounded-[1rem] border border-dashed border-primary/14 px-4 py-10 text-center text-sm text-muted-foreground">
+                        No report rows loaded yet.
+                      </div>
+                    ) : (
+                      <div className="mt-4 overflow-x-auto">
+                        <table className="min-w-full text-left text-sm">
+                          <thead>
+                            <tr className="border-b border-primary/12">
+                              {reportWorkspace.columns.map((column) => (
+                                <th key={column} className="px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                                  {column}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reportWorkspace.rows.slice(0, 25).map((row, index) => (
+                              <tr key={`report-row-${index}`} className="border-b border-primary/8 align-top">
+                                {reportWorkspace.columns.map((column) => (
+                                  <td key={`${index}-${column}`} className="px-3 py-3 text-foreground">
+                                    {row[column] || "-"}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
               {activeTab === "duplicates" && (
-                <DataSection
-                  title="Duplicates"
-                  body="Duplicates remains the admin review queue for compare-and-merge operations, preserving history and leaving merged tombstones."
-                  rows={workspace.duplicates.slice(0, 8).map((entry) => `${entry.primary_asset} | ${entry.duplicate_asset} | ${entry.status}`)}
-                />
+                <div className="space-y-4">
+                  <DataSection
+                    title="Duplicates"
+                    body="Duplicates now includes a compare-and-resolve surface. This pass adds side-by-side review, survivor selection, and merge/not-duplicate resolution handling."
+                    rows={[]}
+                  />
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
+                    <div className="space-y-2">
+                      {workspace.duplicates.length === 0 ? (
+                        <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-10 text-center text-sm text-muted-foreground">
+                          No duplicate pairs found in this queue.
+                        </div>
+                      ) : (
+                        workspace.duplicates.map((entry) => (
+                          <button
+                            key={entry.id}
+                            type="button"
+                            onClick={() => setSelectedDuplicateId(entry.id)}
+                            className={cn(
+                              "flex w-full flex-col gap-1 rounded-[1rem] border px-4 py-3 text-left transition-colors",
+                              entry.id === (selectedDuplicate?.id ?? "") ? "border-primary/24 bg-primary/10 text-primary" : "border-primary/12 bg-card/45 text-foreground",
+                            )}
+                          >
+                            <span className="text-sm font-medium">{entry.primary_asset} vs {entry.duplicate_asset}</span>
+                            <span className="text-sm text-muted-foreground">{entry.status} | {new Date(entry.created_at).toLocaleDateString()}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    <div className="space-y-4">
+                      {selectedDuplicate ? (
+                        <>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <DuplicateAssetCard
+                              label="Primary asset"
+                              asset={duplicateComparison?.primary ?? null}
+                              selected={duplicateSurvivor === "primary"}
+                              onSelect={() => setDuplicateSurvivor("primary")}
+                              disabled={duplicateResolutionStatus !== "Merged"}
+                            />
+                            <DuplicateAssetCard
+                              label="Duplicate candidate"
+                              asset={duplicateComparison?.duplicate ?? null}
+                              selected={duplicateSurvivor === "duplicate"}
+                              onSelect={() => setDuplicateSurvivor("duplicate")}
+                              disabled={duplicateResolutionStatus !== "Merged"}
+                            />
+                          </div>
+                          {loadingDuplicateComparison ? (
+                            <div className="rounded-[1rem] border border-primary/12 bg-card/45 px-4 py-3 text-sm text-muted-foreground">
+                              Loading duplicate comparison...
+                            </div>
+                          ) : null}
+                          {duplicateComparison?.warnings.length ? (
+                            <div className="rounded-[1rem] border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-100/85">
+                              {duplicateComparison.warnings.map((warning) => (
+                                <div key={warning}>{warning}</div>
+                              ))}
+                            </div>
+                          ) : null}
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <SelectTextField
+                              label="Resolution"
+                              value={duplicateResolutionStatus}
+                              onChange={(value) => setDuplicateResolutionStatus(value as "Merged" | "Not Duplicate")}
+                              options={[
+                                { label: "Merged", value: "Merged" },
+                                { label: "Not Duplicate", value: "Not Duplicate" },
+                              ]}
+                            />
+                            <FieldCard label="Queue source" value={duplicateComparison?.source === "live" ? "Live compare data" : "Fallback compare data"} />
+                          </div>
+                          <TextField
+                            label="Resolution note"
+                            value={duplicateNote}
+                            onChange={setDuplicateNote}
+                            placeholder="Explain the merge decision or why this is not a duplicate"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void submitDuplicateResolution()}
+                            disabled={busyAction !== null || !duplicateNote.trim()}
+                            className="matrix-button inline-flex h-11 items-center justify-center rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {busyAction === "duplicate" ? "Saving Duplicate Resolution" : "Save Duplicate Resolution"}
+                          </button>
+                        </>
+                      ) : (
+                        <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-10 text-center text-sm text-muted-foreground">
+                          Choose a duplicate pair to compare and resolve.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
               {activeTab === "config" && (
                 <div className="space-y-4">
@@ -1075,6 +2032,80 @@ export default function SettingsPage() {
                     >
                       {busyAction === "config" ? "Saving Config" : "Save QR Export Config"}
                     </button>
+                  </div>
+                  <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
+                    <div className="font-display text-xl text-foreground glow-soft">QR export asset filter</div>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <TextField label="Search" value={qrFilterSearch} onChange={setQrFilterSearch} placeholder="Tag, name, location..." />
+                      <SelectTextField
+                        label="Location"
+                        value={qrFilterLocationId}
+                        onChange={setQrFilterLocationId}
+                        options={[
+                          { label: "All locations", value: "" },
+                          ...workspace.locations.map((location) => ({ label: location.name, value: location.id })),
+                        ]}
+                      />
+                      <SelectTextField
+                        label="Department"
+                        value={qrFilterDepartmentId}
+                        onChange={setQrFilterDepartmentId}
+                        options={[
+                          { label: "All departments", value: "" },
+                          ...workspace.departments.map((department) => ({ label: department.name, value: department.id })),
+                        ]}
+                      />
+                      <TextField label="Status" value={qrFilterStatus} onChange={setQrFilterStatus} placeholder="available, assigned..." />
+                      <DateField label="Created from" value={qrCreatedFrom} onChange={setQrCreatedFrom} />
+                      <DateField label="Created to" value={qrCreatedTo} onChange={setQrCreatedTo} />
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void loadQrPreview()}
+                        disabled={loadingQrPreview}
+                        className="inline-flex h-11 items-center justify-center rounded-[1rem] border border-primary/18 bg-card/55 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {loadingQrPreview ? "Loading QR Assets" : "Load QR Assets"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void exportQrSheetPdf()}
+                        disabled={busyAction !== null || qrPreviewAssets.length === 0}
+                        className="matrix-button inline-flex h-11 items-center justify-center rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {busyAction === "config" ? "Generating QR PDF" : "Generate QR Sheet PDF"}
+                      </button>
+                    </div>
+                    <div className="mt-4 rounded-[1rem] border border-primary/10 bg-card/35 px-4 py-3 text-sm text-muted-foreground">
+                      {qrPreviewAssets.length} asset{qrPreviewAssets.length === 1 ? "" : "s"} currently matched. Output remains A4, sorted by tag, with UUID-encoded QR payloads and visible tag text.
+                    </div>
+                    {qrPreviewAssets.length > 0 && (
+                      <div className="mt-4 max-h-64 overflow-auto rounded-[1rem] border border-primary/10 bg-card/35">
+                        <table className="min-w-full text-left text-sm">
+                          <thead>
+                            <tr className="border-b border-primary/12">
+                              {["Tag", "Name", "Location", "Department", "Status"].map((column) => (
+                                <th key={column} className="px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                                  {column}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {qrPreviewAssets.slice(0, 50).map((asset) => (
+                              <tr key={asset.id} className="border-b border-primary/8">
+                                <td className="px-3 py-3 text-foreground">{asset.tag}</td>
+                                <td className="px-3 py-3 text-foreground">{asset.name}</td>
+                                <td className="px-3 py-3 text-foreground">{asset.location}</td>
+                                <td className="px-3 py-3 text-foreground">{asset.department}</td>
+                                <td className="px-3 py-3 text-foreground">{asset.status}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1169,6 +2200,28 @@ function NumberTextField({
   );
 }
 
+function DateField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="space-y-2">
+      <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{label}</span>
+      <input
+        type="date"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="matrix-field h-12 w-full rounded-[1rem] px-4 text-sm text-foreground outline-none"
+      />
+    </label>
+  );
+}
+
 function SelectTextField({
   label,
   value,
@@ -1224,5 +2277,72 @@ function ActionRow({
         {actionLabel}
       </button>
     </div>
+  );
+}
+
+function KitAssetRow({
+  title,
+  meta,
+  actionLabel,
+  onAction,
+  disabled,
+}: {
+  title: string;
+  meta: string;
+  actionLabel: string;
+  onAction: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-[1rem] border border-primary/12 bg-card/45 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-foreground">{title}</div>
+        <div className="mt-1 text-sm text-muted-foreground">{meta}</div>
+      </div>
+      <button
+        type="button"
+        onClick={onAction}
+        disabled={disabled}
+        className="inline-flex h-10 items-center justify-center rounded-[0.9rem] border border-primary/18 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {actionLabel}
+      </button>
+    </div>
+  );
+}
+
+function DuplicateAssetCard({
+  label,
+  asset,
+  selected,
+  onSelect,
+  disabled,
+}: {
+  label: string;
+  asset: DuplicateComparison["primary"];
+  selected: boolean;
+  onSelect: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      disabled={disabled}
+      className={cn(
+        "rounded-[1rem] border px-4 py-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+        selected ? "border-primary/24 bg-primary/10 text-primary" : "border-primary/12 bg-card/45 text-foreground",
+      )}
+    >
+      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
+      <div className="mt-3 space-y-2 text-sm">
+        <div className="font-medium text-foreground">{asset?.name ?? "Unknown asset"}</div>
+        <div>Tag: {asset?.tag ?? "-"}</div>
+        <div>Serial: {asset?.serial ?? "-"}</div>
+        <div>Location: {asset?.location ?? "-"}</div>
+        <div>Department: {asset?.department ?? "-"}</div>
+        <div>Status: {asset?.status ?? "-"}</div>
+      </div>
+    </button>
   );
 }

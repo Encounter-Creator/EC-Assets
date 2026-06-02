@@ -26,6 +26,7 @@ export type ApprovalQueueItem = {
 
 export type ApprovalsWorkspaceData = {
   queues: Record<ApprovalTab, ApprovalQueueItem[]>;
+  locations: Array<{ id: string; name: string }>;
   source: "live" | "mixed" | "fallback";
   warnings: string[];
 };
@@ -95,9 +96,17 @@ const emptyQueues = (): Record<ApprovalTab, ApprovalQueueItem[]> => ({
   damage_locks: [],
 });
 
+const fallbackLocations = [
+  { id: "l1", name: "Centurion" },
+  { id: "l2", name: "Krugersdorp" },
+  { id: "l3", name: "Lanseria" },
+  { id: "l4", name: "Office" },
+];
+
 export const fallbackApprovalsWorkspace: ApprovalsWorkspaceData = {
   source: "fallback",
   warnings: ["Supabase is not configured yet, so Approvals is using the rebuild preview dataset."],
+  locations: fallbackLocations,
   queues: {
     recipient: [
       {
@@ -441,12 +450,30 @@ async function loadDamageQueues(supabase: SupabaseClient, activeLocationId: stri
   return queues;
 }
 
+async function loadApprovalLocations(supabase: SupabaseClient) {
+  try {
+    const { data, error } = await supabase.rpc("list_standard_locations");
+    if (error) throw error;
+    return ((data ?? []) as Array<{ id: string; name: string }>).filter((row) => row.id && row.name);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Locations could not be loaded.";
+    if (!isMissingSchemaError(message)) {
+      throw error;
+    }
+  }
+
+  const { data, error } = await supabase.from("locations").select("id, name").eq("active", true).order("name");
+  if (error) throw error;
+  return ((data ?? []) as Array<{ id: string; name: string }>).filter((row) => row.id && row.name);
+}
+
 export async function loadApprovalsWorkspace(supabase: SupabaseClient, activeLocationId: string | null): Promise<ApprovalsWorkspaceData> {
   const warnings: string[] = [];
 
-  const [approvalResult, damageResult] = await Promise.allSettled([
+  const [approvalResult, damageResult, locationsResult] = await Promise.allSettled([
     loadApprovalQueues(supabase, activeLocationId),
     loadDamageQueues(supabase, activeLocationId),
+    loadApprovalLocations(supabase),
   ]);
 
   const approvalQueues =
@@ -467,6 +494,15 @@ export async function loadApprovalsWorkspace(supabase: SupabaseClient, activeLoc
           return emptyQueues();
         })();
 
+  const locations =
+    locationsResult.status === "fulfilled"
+      ? locationsResult.value
+      : (() => {
+          const message = locationsResult.reason instanceof Error ? locationsResult.reason.message : "Approval locations could not be loaded.";
+          warnings.push(isMissingSchemaError(message) ? "Approval locations are using fallback data because the live location surface is not fully available yet." : message);
+          return fallbackLocations;
+        })();
+
   const queues = emptyQueues();
   for (const tab of Object.keys(queues) as ApprovalTab[]) {
     queues[tab] = [...approvalQueues[tab], ...damageQueues[tab]];
@@ -478,6 +514,7 @@ export async function loadApprovalsWorkspace(supabase: SupabaseClient, activeLoc
     return {
       ...fallbackApprovalsWorkspace,
       source: successCount === 0 ? "fallback" : "mixed",
+      locations,
       warnings: [...fallbackApprovalsWorkspace.warnings, ...warnings],
     };
   }
@@ -485,6 +522,7 @@ export async function loadApprovalsWorkspace(supabase: SupabaseClient, activeLoc
   const source = successCount === 2 ? "live" : "mixed";
   return {
     queues,
+    locations,
     source,
     warnings,
   };
@@ -505,6 +543,58 @@ export async function reviewApprovalItem(
   });
 }
 
+function toPayloadRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? ({ ...value } as Record<string, unknown>) : {};
+}
+
+function appendAuditLine(existing: string | null | undefined, line: string) {
+  const trimmedExisting = existing?.trim() ?? "";
+  return trimmedExisting ? `${trimmedExisting}\n${line}` : line;
+}
+
+export async function sendRecipientReminder(
+  supabase: SupabaseClient,
+  input: {
+    approvalId: string;
+    note?: string;
+  },
+) {
+  const { data: approvalRow, error: approvalError } = await supabase
+    .from("approvals")
+    .select("id, payload, review_notes")
+    .eq("id", input.approvalId)
+    .maybeSingle();
+
+  if (approvalError) throw approvalError;
+  if (!approvalRow) throw new Error("Recipient approval was not found.");
+
+  const sentAt = new Date().toISOString();
+  const payload = toPayloadRecord(approvalRow.payload);
+  const currentReminderCount =
+    typeof payload.reminder_count === "number"
+      ? payload.reminder_count
+      : typeof payload.reminder_count === "string"
+        ? Number.parseInt(payload.reminder_count, 10) || 0
+        : 0;
+  const trimmedNote = input.note?.trim() ?? "";
+
+  return supabase
+    .from("approvals")
+    .update({
+      payload: {
+        ...payload,
+        reminder_count: currentReminderCount + 1,
+        last_reminder_at: sentAt,
+        last_reminder_note: trimmedNote || null,
+      },
+      review_notes: appendAuditLine(
+        approvalRow.review_notes,
+        trimmedNote ? `[Reminder sent ${sentAt}] ${trimmedNote}` : `[Reminder sent ${sentAt}]`,
+      ),
+    })
+    .eq("id", input.approvalId);
+}
+
 export async function resolveDamageCaseItem(
   supabase: SupabaseClient,
   input: {
@@ -517,5 +607,95 @@ export async function resolveDamageCaseItem(
     p_case_id: input.caseId,
     p_resolved_state: input.resolvedState,
     p_condition_note: input.conditionNote?.trim() || null,
+  });
+}
+
+export async function resolveDamageCaseLost(
+  supabase: SupabaseClient,
+  input: {
+    caseId: string;
+  },
+) {
+  const { data: caseRow, error: caseError } = await supabase
+    .from("damage_cases")
+    .select("id, asset_id")
+    .eq("id", input.caseId)
+    .maybeSingle();
+
+  if (caseError) throw caseError;
+  if (!caseRow) throw new Error("Damage case was not found.");
+
+  if (caseRow.asset_id) {
+    const { error: assetError } = await supabase
+      .from("assets")
+      .update({
+        status: "lost",
+        current_holder: null,
+      })
+      .eq("id", caseRow.asset_id);
+
+    if (assetError) throw assetError;
+  }
+
+  return supabase
+    .from("damage_cases")
+    .update({
+      status: "Resolved: Lost",
+    })
+    .eq("id", input.caseId);
+}
+
+export async function acceptReturnApproval(
+  supabase: SupabaseClient,
+  input: {
+    approvalId: string;
+    finalLocationId: string;
+    reviewNotes?: string;
+  },
+) {
+  const { data: approvalRow, error: approvalError } = await supabase
+    .from("approvals")
+    .select("id, request_id, payload")
+    .eq("id", input.approvalId)
+    .maybeSingle();
+
+  if (approvalError) throw approvalError;
+  if (!approvalRow) throw new Error("Return approval was not found.");
+
+  let assetIds = Array.isArray((approvalRow.payload as Record<string, unknown> | null)?.asset_ids)
+    ? ((approvalRow.payload as Record<string, unknown>).asset_ids as unknown[]).filter((value): value is string => typeof value === "string")
+    : [];
+
+  if (assetIds.length === 0 && approvalRow.request_id) {
+    const { data: requestRow, error: requestError } = await supabase
+      .from("requests")
+      .select("payload")
+      .eq("id", approvalRow.request_id)
+      .maybeSingle();
+
+    if (requestError) throw requestError;
+
+    assetIds = Array.isArray((requestRow?.payload as Record<string, unknown> | null)?.asset_ids)
+      ? ((requestRow?.payload as Record<string, unknown>).asset_ids as unknown[]).filter((value): value is string => typeof value === "string")
+      : [];
+  }
+
+  if (assetIds.length === 0) {
+    throw new Error("This return approval does not include any resolvable asset IDs.");
+  }
+
+  const { error: signInError } = await supabase.rpc("standard_sign_in_assets", {
+    p_asset_ids: assetIds,
+    p_final_location_id: input.finalLocationId,
+    p_outcome: "Available",
+    p_note: input.reviewNotes?.trim() || null,
+  });
+
+  if (signInError) throw signInError;
+
+  return reviewApprovalItem(supabase, {
+    approvalId: input.approvalId,
+    status: "Approved",
+    reviewNotes: input.reviewNotes,
   });
 }

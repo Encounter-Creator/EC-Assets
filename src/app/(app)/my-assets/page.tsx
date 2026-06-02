@@ -1,7 +1,8 @@
 "use client";
 
-import { AlertTriangle, ArrowLeftRight, CheckCircle2, PackageCheck, RefreshCcw, RotateCcw, ShieldCheck, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, CheckCircle2, PackageCheck, RefreshCcw, RotateCcw, ShieldAlert, ShieldCheck, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/contexts/auth-context";
 import { getAssetStatusLabel, getStatusBadgeClass, normalizeAssetStatus } from "@/lib/assets";
@@ -9,9 +10,13 @@ import {
   fallbackAssignedAssets,
   fallbackDamageRecords,
   fallbackPendingItems,
+  loadHandoverRecipients,
   loadMyAssetsWorkspace,
+  submitDamageReport,
+  submitHandoverRequest,
   type AssignedAsset,
   type DamageRecord,
+  type HandoverRecipient,
   type MyAssetsWorkspaceData,
   type PendingItem,
 } from "@/lib/my-assets";
@@ -40,26 +45,60 @@ type FeedbackState = {
   message: string;
 };
 
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString();
+}
+
+function isMyAssetsTab(value: string | null): value is "assigned" | "pending" | "damage" {
+  return value === "assigned" || value === "pending" || value === "damage";
+}
+
 export default function MyAssetsPage() {
-  const { user, isConfigured, isVolunteer } = useAuth();
-  const [activeTab, setActiveTab] = useState<"assigned" | "pending" | "damage">("assigned");
+  const { damageLockCase, isConfigured, isDamageLocked, isVolunteer, retryAccessLoad, user } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedTabValue = searchParams.get("tab");
+  const requestedTab: "assigned" | "pending" | "damage" | null = isMyAssetsTab(requestedTabValue) ? requestedTabValue : null;
+  const [tabState, setTabState] = useState<"assigned" | "pending" | "damage">(requestedTab ?? "assigned");
+  const activeTab = requestedTab ?? tabState;
   const [workspace, setWorkspace] = useState<MyAssetsWorkspaceData>(fallbackWorkspace);
   const [loading, setLoading] = useState(true);
   const [selectedPendingIds, setSelectedPendingIds] = useState<string[]>([]);
   const [busyPendingIds, setBusyPendingIds] = useState<string[]>([]);
+  const [declineReason, setDeclineReason] = useState("");
+  const [handoverAsset, setHandoverAsset] = useState<AssignedAsset | null>(null);
+  const [handoverRecipients, setHandoverRecipients] = useState<HandoverRecipient[]>([]);
+  const [selectedHandoverRecipientId, setSelectedHandoverRecipientId] = useState("");
+  const [handoverNote, setHandoverNote] = useState("");
+  const [loadingHandoverRecipients, setLoadingHandoverRecipients] = useState(false);
+  const [submittingHandover, setSubmittingHandover] = useState(false);
+  const [damageAssetId, setDamageAssetId] = useState("");
+  const [damageType, setDamageType] = useState("Physical damage");
+  const [damageDescription, setDamageDescription] = useState("");
+  const [submittingDamage, setSubmittingDamage] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const validSelectedPendingIds = useMemo(
     () => selectedPendingIds.filter((id) => workspace.pendingItems.some((item) => item.id === id)),
     [selectedPendingIds, workspace.pendingItems],
   );
+  const damageAssetOptions = useMemo(
+    () => workspace.assignedAssets.filter((asset) => normalizeAssetStatus(asset.status) !== "damaged"),
+    [workspace.assignedAssets],
+  );
+  const selectedDamageAssetId =
+    (damageAssetId && damageAssetOptions.some((asset) => asset.id === damageAssetId) ? damageAssetId : "") || damageAssetOptions[0]?.id || "";
 
   const summary = useMemo(
     () => ({
       assigned: workspace.assignedAssets.length,
       pending: workspace.pendingItems.length,
-      damage: workspace.damageRecords.length,
+      damage: workspace.damageRecords.length + (damageLockCase ? 1 : 0),
     }),
-    [workspace],
+    [damageLockCase, workspace],
   );
 
   const refreshWorkspace = async () => {
@@ -143,6 +182,15 @@ export default function MyAssetsPage() {
     };
   }, [isConfigured, user]);
 
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("tab", activeTab);
+    const nextQuery = nextParams.toString();
+    if (nextQuery !== searchParams.toString()) {
+      router.replace(`${pathname}?${nextQuery}`, { scroll: false });
+    }
+  }, [activeTab, pathname, router, searchParams]);
+
   const togglePending = (id: string) => {
     setSelectedPendingIds((current) => (current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]));
   };
@@ -157,12 +205,20 @@ export default function MyAssetsPage() {
       return false;
     }
 
+    if (!accept && !declineReason.trim()) {
+      setFeedback({
+        tone: "error",
+        message: "Decline reason is required before rejecting a pending item.",
+      });
+      return false;
+    }
+
     setBusyPendingIds((current) => [...current, item.id]);
     try {
       if (item.type === "assignment") {
         const { error } = await supabase.rpc(accept ? "approve_recipient_signout_approval" : "decline_recipient_signout_approval", {
           target_approval_id: item.id,
-          ...(accept ? {} : { decline_notes: null }),
+          ...(accept ? {} : { decline_notes: declineReason.trim() }),
         });
         if (error) throw error;
       } else {
@@ -185,6 +241,9 @@ export default function MyAssetsPage() {
               : "Handover rejected.",
       });
       setSelectedPendingIds((current) => current.filter((entry) => entry !== item.id));
+      if (!accept) {
+        setDeclineReason("");
+      }
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "The pending action failed.";
@@ -225,10 +284,147 @@ export default function MyAssetsPage() {
   };
 
   const handleAssignedAction = (asset: AssignedAsset, action: string) => {
+    if (action === "Request Return") {
+      router.push(`/requests?tab=returns&assetId=${encodeURIComponent(asset.id)}`);
+      return;
+    }
+
+    if (action === "Request Handover") {
+      if (!user) {
+        setFeedback({ tone: "error", message: "You must be signed in to request a handover." });
+        return;
+      }
+
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        setFeedback({ tone: "error", message: "Supabase is not configured yet, so handover requests are unavailable." });
+        return;
+      }
+
+      setHandoverAsset(asset);
+      setSelectedHandoverRecipientId("");
+      setHandoverNote("");
+      setLoadingHandoverRecipients(true);
+      void loadHandoverRecipients(supabase, user.id)
+        .then((rows) => setHandoverRecipients(rows))
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : "Handover recipients could not be loaded.";
+          setFeedback({ tone: "error", message });
+          setHandoverRecipients([]);
+        })
+        .finally(() => setLoadingHandoverRecipients(false));
+      return;
+    }
+
+    if (action === "Report Damage") {
+      setTabState("damage");
+      setDamageAssetId(asset.id);
+      setDamageType("Physical damage");
+      setDamageDescription("");
+      setFeedback({
+        tone: "info",
+        message: `Damage reporting opened for ${asset.tag}. Submit the incident here to move it into review.`,
+      });
+      return;
+    }
+
     setFeedback({
       tone: "info",
       message: `${action} for ${asset.tag} is the next live form to wire. The assigned and pending data are now connected first.`,
     });
+  };
+
+  const submitHandover = async () => {
+    if (!user || !handoverAsset) {
+      setFeedback({ tone: "error", message: "Choose an assigned asset first." });
+      return;
+    }
+    if (!selectedHandoverRecipientId) {
+      setFeedback({ tone: "error", message: "Choose the receiving user first." });
+      return;
+    }
+    if (!handoverNote.trim()) {
+      setFeedback({ tone: "error", message: "Handover note is required." });
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setFeedback({ tone: "error", message: "Supabase is not configured yet, so handover requests are unavailable." });
+      return;
+    }
+
+    setSubmittingHandover(true);
+    try {
+      await submitHandoverRequest(supabase, {
+        fromUserId: user.id,
+        toUserId: selectedHandoverRecipientId,
+        assetIds: [handoverAsset.id],
+        notes: handoverNote,
+      });
+      setFeedback({ tone: "success", message: `Handover request sent for ${handoverAsset.tag}.` });
+      setHandoverAsset(null);
+      setSelectedHandoverRecipientId("");
+      setHandoverNote("");
+      await refreshWorkspace();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Handover request failed.";
+      setFeedback({ tone: "error", message });
+    } finally {
+      setSubmittingHandover(false);
+    }
+  };
+
+  const submitDamage = async () => {
+    if (!user) {
+      setFeedback({ tone: "error", message: "You must be signed in to submit a damage report." });
+      return;
+    }
+    if (isDamageLocked) {
+      setFeedback({ tone: "info", message: "An active damage lock already exists for this account. Continue in the dedicated damage workflow." });
+      return;
+    }
+
+    const selectedDamageAsset = workspace.assignedAssets.find((asset) => asset.id === selectedDamageAssetId);
+    if (!selectedDamageAsset) {
+      setFeedback({ tone: "error", message: "Choose the affected asset first." });
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setFeedback({ tone: "error", message: "Supabase is not configured yet, so damage reporting is unavailable." });
+      return;
+    }
+
+    setSubmittingDamage(true);
+    try {
+      const result = await submitDamageReport(supabase, {
+        userId: user.id,
+        assetId: selectedDamageAsset.id,
+        assetTag: selectedDamageAsset.tag,
+        assetName: selectedDamageAsset.name,
+        damageType,
+        description: damageDescription,
+      });
+
+      setFeedback({
+        tone: "success",
+        message:
+          result.target === "damage_cases"
+            ? `Damage report submitted for ${selectedDamageAsset.tag}. The account lock workflow will refresh now.`
+            : `Damage report submitted for ${selectedDamageAsset.tag}. The legacy damage queue recorded the incident.`,
+      });
+      setDamageType("Physical damage");
+      setDamageDescription("");
+      await retryAccessLoad();
+      await refreshWorkspace();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Damage report submission failed.";
+      setFeedback({ tone: "error", message });
+    } finally {
+      setSubmittingDamage(false);
+    }
   };
 
   return (
@@ -240,7 +436,7 @@ export default function MyAssetsPage() {
               <div className="app-kicker">My Assets</div>
               <h1 className="app-title mt-2">Action-oriented personal asset workspace rebuilt into the new shell.</h1>
               <p className="app-subtitle mt-3">
-                This page now loads real assigned assets, pending recipient approvals, and pending handovers where the live schema supports them. `Damage` remains history-only.
+                This page now loads real assigned assets, pending recipient approvals, pending handovers, and active damage-lock state where the live schema supports them.
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2 sm:min-w-[22rem]">
@@ -293,15 +489,75 @@ export default function MyAssetsPage() {
         <section className="app-panel overflow-hidden">
           <div className="border-b border-primary/12 px-4 py-4 sm:px-5">
             <div className="flex flex-wrap gap-2">
-              <TabButton active={activeTab === "assigned"} onClick={() => setActiveTab("assigned")} label="Assigned" count={summary.assigned} />
-              <TabButton active={activeTab === "pending"} onClick={() => setActiveTab("pending")} label="Pending" count={summary.pending} />
-              <TabButton active={activeTab === "damage"} onClick={() => setActiveTab("damage")} label="Damage" count={summary.damage} />
+              <TabButton active={activeTab === "assigned"} onClick={() => setTabState("assigned")} label="Assigned" count={summary.assigned} />
+              <TabButton active={activeTab === "pending"} onClick={() => setTabState("pending")} label="Pending" count={summary.pending} />
+              <TabButton active={activeTab === "damage"} onClick={() => setTabState("damage")} label="Damage" count={summary.damage} />
             </div>
           </div>
 
           <div className="p-4 sm:p-5">
             {activeTab === "assigned" && (
               <div className="space-y-4">
+                {handoverAsset && (
+                  <div className="app-panel p-4 sm:p-5">
+                    <div className="app-kicker">Handover request</div>
+                    <div className="mt-2 font-display text-2xl text-foreground glow-soft">{handoverAsset.tag} | {handoverAsset.name}</div>
+                    <div className="mt-3 text-sm text-muted-foreground">
+                      Pending handover keeps the asset assigned while the recipient decides. Use this to transfer responsibility without leaving `My Assets`.
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      <label className="space-y-2">
+                        <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Receiving user</span>
+                        <div className="matrix-field rounded-[1.15rem] px-4">
+                          <select
+                            value={selectedHandoverRecipientId}
+                            onChange={(event) => setSelectedHandoverRecipientId(event.target.value)}
+                            className="h-12 w-full bg-transparent text-sm text-foreground outline-none"
+                            disabled={loadingHandoverRecipients || submittingHandover}
+                          >
+                            <option value="" className="bg-[hsl(var(--card))] text-foreground">
+                              {loadingHandoverRecipients ? "Loading recipients..." : "Choose recipient"}
+                            </option>
+                            {handoverRecipients.map((recipient) => (
+                              <option key={recipient.id} value={recipient.id} className="bg-[hsl(var(--card))] text-foreground">
+                                {recipient.fullName} | {recipient.homeBase ?? "No home base"} | {recipient.role}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </label>
+                      <label className="space-y-2">
+                        <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Handover note</span>
+                        <textarea
+                          value={handoverNote}
+                          onChange={(event) => setHandoverNote(event.target.value)}
+                          placeholder="Explain why this handover is needed and any context the recipient should see."
+                          className="matrix-field min-h-28 w-full rounded-[1.15rem] px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                        />
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void submitHandover()}
+                          disabled={submittingHandover || loadingHandoverRecipients || !selectedHandoverRecipientId || !handoverNote.trim()}
+                          className="matrix-button inline-flex h-11 items-center justify-center gap-2 rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <ArrowLeftRight size={15} />
+                          {submittingHandover ? "Sending Handover" : "Send Handover Request"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHandoverAsset(null)}
+                          disabled={submittingHandover}
+                          className="inline-flex h-11 items-center justify-center rounded-[1rem] border border-primary/18 bg-card/55 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {workspace.assignedAssets.map((asset) => {
                   const normalizedStatus = normalizeAssetStatus(asset.status);
                   return (
@@ -360,6 +616,16 @@ export default function MyAssetsPage() {
 
             {activeTab === "pending" && (
               <div className="space-y-4">
+                <label className="space-y-2">
+                  <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Shared decline reason</span>
+                  <textarea
+                    value={declineReason}
+                    onChange={(event) => setDeclineReason(event.target.value)}
+                    placeholder="Required for decline actions. Bulk decline uses one shared reason."
+                    className="matrix-field min-h-24 w-full rounded-[1.15rem] px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                  />
+                </label>
+
                 <div className="flex flex-wrap items-center gap-2 rounded-[1.2rem] border border-primary/12 bg-card/45 px-4 py-3">
                   <span className="font-mono text-xs uppercase tracking-[0.16em] text-primary/72">{validSelectedPendingIds.length} selected</span>
                   <button
@@ -373,7 +639,7 @@ export default function MyAssetsPage() {
                   <button
                     type="button"
                     onClick={() => void handleBulkAction(false)}
-                    disabled={validSelectedPendingIds.length === 0 || busyPendingIds.length > 0}
+                    disabled={validSelectedPendingIds.length === 0 || busyPendingIds.length > 0 || !declineReason.trim()}
                     className="rounded-full border border-destructive/20 px-3 py-1 text-[11px] font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Bulk Decline
@@ -466,6 +732,129 @@ export default function MyAssetsPage() {
 
             {activeTab === "damage" && (
               <div className="space-y-4">
+                {damageLockCase && (
+                  <div className="app-panel p-4 sm:p-5">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-sm uppercase tracking-[0.14em] text-primary">{damageLockCase.assetTag}</span>
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
+                              isDamageLocked
+                                ? "border-destructive/30 bg-destructive/10 text-destructive"
+                                : "border-amber-500/30 bg-amber-500/10 text-amber-300",
+                            )}
+                          >
+                            {damageLockCase.status}
+                          </span>
+                        </div>
+                        <div className="mt-2 font-display text-2xl text-foreground glow-soft">{damageLockCase.assetName}</div>
+                        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                          <span>Location: {damageLockCase.locationName ?? "Unknown location"}</span>
+                          <span>Opened: {formatDateTime(damageLockCase.openedAt)}</span>
+                        </div>
+                        <div className="mt-3 rounded-[1rem] border border-destructive/18 bg-destructive/8 px-4 py-3 text-sm text-muted-foreground">
+                          {isDamageLocked
+                            ? "This incident is actively blocking normal workflows until you submit the required damage statement."
+                            : "This incident is still active and should be completed through the dedicated damage workflow."}
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 sm:min-w-[15rem]">
+                        <button
+                          type="button"
+                          onClick={() => router.push("/damage-lock")}
+                          className="matrix-button inline-flex h-11 items-center justify-center gap-2 rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em]"
+                        >
+                          <ShieldAlert size={15} />
+                          {isDamageLocked ? "Open Damage Form" : "Open Damage Workflow"}
+                        </button>
+                        <div className="rounded-[1rem] border border-primary/12 bg-card/45 px-4 py-3 text-sm text-muted-foreground">
+                          Your historical incidents stay below. The active case always routes through the dedicated lock flow.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!isDamageLocked && (
+                  <div className="app-panel p-4 sm:p-5">
+                    <div className="app-kicker">Damage report</div>
+                    <div className="mt-2 font-display text-2xl text-foreground glow-soft">Start a new incident from My Assets</div>
+                    <div className="mt-3 text-sm text-muted-foreground">
+                      This tab now supports first-pass damage authoring. Submit the affected asset, incident type, and statement here so the case enters the review queue.
+                    </div>
+
+                    <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                      <label className="space-y-2">
+                        <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Affected asset</span>
+                        <div className="matrix-field rounded-[1.15rem] px-4">
+                          <select
+                            value={selectedDamageAssetId}
+                            onChange={(event) => setDamageAssetId(event.target.value)}
+                            className="h-12 w-full bg-transparent text-sm text-foreground outline-none"
+                            disabled={submittingDamage || damageAssetOptions.length === 0}
+                          >
+                            <option value="" className="bg-[hsl(var(--card))] text-foreground">
+                              {damageAssetOptions.length === 0 ? "No assigned assets available" : "Choose assigned asset"}
+                            </option>
+                            {damageAssetOptions.map((asset) => (
+                              <option key={asset.id} value={asset.id} className="bg-[hsl(var(--card))] text-foreground">
+                                {asset.tag} | {asset.name} | {asset.location}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </label>
+
+                      <label className="space-y-2">
+                        <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Damage type</span>
+                        <div className="matrix-field rounded-[1.15rem] px-4">
+                          <select
+                            value={damageType}
+                            onChange={(event) => setDamageType(event.target.value)}
+                            className="h-12 w-full bg-transparent text-sm text-foreground outline-none"
+                            disabled={submittingDamage}
+                          >
+                            {["Physical damage", "Missing parts", "Functional fault", "Loss / theft", "Other"].map((option) => (
+                              <option key={option} value={option} className="bg-[hsl(var(--card))] text-foreground">
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </label>
+                    </div>
+
+                    <label className="mt-3 block space-y-2">
+                      <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Incident statement</span>
+                      <textarea
+                        value={damageDescription}
+                        onChange={(event) => setDamageDescription(event.target.value)}
+                        placeholder="Describe what happened, the current condition, and any immediate operational risk."
+                        className="matrix-field min-h-32 w-full rounded-[1.15rem] px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                        disabled={submittingDamage}
+                      />
+                    </label>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void submitDamage()}
+                        disabled={submittingDamage || !selectedDamageAssetId || !damageDescription.trim()}
+                        className="matrix-button inline-flex h-11 items-center justify-center gap-2 rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <ShieldAlert size={15} />
+                        {submittingDamage ? "Submitting Damage" : "Submit Damage Report"}
+                      </button>
+                      <div className="rounded-[1rem] border border-primary/12 bg-card/45 px-4 py-3 text-sm text-muted-foreground">
+                        If the newer damage-case surface exists, this will open the full damage-lock workflow automatically after refresh.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {workspace.damageRecords.map((record) => (
                   <div key={record.id} className="app-panel p-4 sm:p-5">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -496,7 +885,7 @@ export default function MyAssetsPage() {
                 )}
 
                 <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 px-4 py-4 text-sm text-muted-foreground">
-                  This tab remains history-only in v2. The user damage-report workflow does not live here.
+                  Damage history stays here. If a new incident locks your account, this tab surfaces the active case and sends you into the dedicated damage form flow.
                 </div>
               </div>
             )}

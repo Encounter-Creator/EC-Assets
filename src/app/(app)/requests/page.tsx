@@ -2,6 +2,7 @@
 
 import { AlertTriangle, CheckCircle2, Clock3, History, MapPin, PackageCheck, RefreshCcw, RotateCcw, ShieldCheck, ShoppingBasket } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useLocationScope } from "@/contexts/location-scope-context";
@@ -10,13 +11,16 @@ import {
   fallbackAssignedForReturn,
   fallbackRequestHistory,
   fallbackRequestableAssets,
+  getSpecialRequestAssetHint,
   getRequestAssetHint,
+  isSpecialRequestAssetCompatible,
   loadRequestsWorkspace,
   submitSpecialRequest,
   submitReturnRequest,
   submitAssetRequest,
   type RequestHistoryItem,
   type RequestsWorkspaceData,
+  type SpecialRequestType,
 } from "@/lib/requests";
 import { matchesSearchQuery } from "@/lib/search";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -45,10 +49,76 @@ type FeedbackState = {
   message: string;
 };
 
+type RequestDraftTab = "asset" | "special" | "returns";
+
+type AssetRequestDraft = {
+  assetSearch: string;
+  selectedAssetIds: string[];
+  sourceLocationId: string;
+  neededDate: string;
+  reason: string;
+  duration: string;
+  eventContext: string;
+};
+
+type SpecialRequestDraft = {
+  specialType: SpecialRequestType;
+  selectedSpecialAssetId: string;
+  sourceLocationId: string;
+  neededDate: string;
+  reason: string;
+  duration: string;
+  eventContext: string;
+};
+
+type ReturnRequestDraft = {
+  selectedReturnIds: string[];
+  sourceLocationId: string;
+  returnDate: string;
+  preferredReturnLocationId: string;
+  returnNote: string;
+};
+
+function isPastDateInput(value: string) {
+  if (!value.trim()) return false;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.getTime() < Date.now();
+}
+
+function getDraftStorageKey(userId: string, tab: RequestDraftTab) {
+  return `assets-requests-draft:${userId}:${tab}`;
+}
+
+function readDraft<T>(userId: string, tab: RequestDraftTab): T | null {
+  const raw = window.localStorage.getItem(getDraftStorageKey(userId, tab));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    window.localStorage.removeItem(getDraftStorageKey(userId, tab));
+    return null;
+  }
+}
+
+function writeDraft<T>(userId: string, tab: RequestDraftTab, value: T) {
+  window.localStorage.setItem(getDraftStorageKey(userId, tab), JSON.stringify(value));
+}
+
+function clearDraft(userId: string, tab: RequestDraftTab) {
+  window.localStorage.removeItem(getDraftStorageKey(userId, tab));
+}
+
 export default function RequestsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const requestedAssetId = searchParams.get("assetId");
   const { user, isAdmin, isStaff, isConfigured } = useAuth();
   const { activeLocationId, selectedLocationName, locations } = useLocationScope();
-  const [activeTab, setActiveTab] = useState<"asset" | "special" | "returns" | "history">("asset");
+  const activeTab: "asset" | "special" | "returns" | "history" =
+    requestedTab === "returns" ? "returns" : requestedTab === "special" ? "special" : requestedTab === "history" ? "history" : "asset";
   const [workspace, setWorkspace] = useState<RequestsWorkspaceData>(fallbackWorkspace);
   const [loading, setLoading] = useState(true);
   const [assetSearch, setAssetSearch] = useState("");
@@ -57,9 +127,10 @@ export default function RequestsPage() {
   const [reason, setReason] = useState("");
   const [duration, setDuration] = useState("");
   const [eventContext, setEventContext] = useState("");
-  const [specialType, setSpecialType] = useState<"Stationed Use" | "Permanent Reassignment">("Stationed Use");
+  const [specialType, setSpecialType] = useState<SpecialRequestType>("Stationed Use");
   const [selectedSpecialAssetId, setSelectedSpecialAssetId] = useState<string>("");
   const [selectedReturnIds, setSelectedReturnIds] = useState<string[]>([]);
+  const [requestSourceLocationId, setRequestSourceLocationId] = useState("");
   const [returnDate, setReturnDate] = useState("");
   const [preferredReturnLocationId, setPreferredReturnLocationId] = useState("");
   const [returnNote, setReturnNote] = useState("");
@@ -67,8 +138,20 @@ export default function RequestsPage() {
   const [submittingSpecialRequest, setSubmittingSpecialRequest] = useState(false);
   const [submittingReturnRequest, setSubmittingReturnRequest] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [draftHydratedTab, setDraftHydratedTab] = useState<RequestDraftTab | null>(null);
 
   const canUseRequests = isAdmin || isStaff;
+  const replaceRequestsRoute = (tab: "asset" | "special" | "returns" | "history", assetId?: string | null) => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("tab", tab);
+    if (assetId) {
+      nextParams.set("assetId", assetId);
+    } else {
+      nextParams.delete("assetId");
+    }
+    const nextQuery = nextParams.toString();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+  };
   const resolvedSpecialAssetId = useMemo(() => {
     if (selectedSpecialAssetId && workspace.requestableAssets.some((asset) => asset.id === selectedSpecialAssetId)) {
       return selectedSpecialAssetId;
@@ -157,36 +240,229 @@ export default function RequestsPage() {
     };
   }, [activeLocationId, isConfigured, user]);
 
+  const effectiveSelectedAssetIds = useMemo(() => {
+    const nextIds = new Set(selectedAssetIds);
+    if ((requestedTab === "asset" || !requestedTab) && requestedAssetId && workspace.requestableAssets.some((asset) => asset.id === requestedAssetId)) {
+      nextIds.add(requestedAssetId);
+    }
+    return [...nextIds];
+  }, [requestedAssetId, requestedTab, selectedAssetIds, workspace.requestableAssets]);
+  const resolvedRequestSourceLocationId = activeLocationId ?? requestSourceLocationId;
+  const resolvedRequestSourceLocationName = useMemo(() => {
+    if (!resolvedRequestSourceLocationId) return null;
+    return locations.find((location) => location.id === resolvedRequestSourceLocationId)?.name ?? null;
+  }, [locations, resolvedRequestSourceLocationId]);
+  const constrainedSelectedAssetIds = useMemo(
+    () =>
+      !resolvedRequestSourceLocationName
+        ? effectiveSelectedAssetIds
+        : effectiveSelectedAssetIds.filter((id) =>
+            workspace.requestableAssets.some((asset) => asset.id === id && asset.location === resolvedRequestSourceLocationName),
+          ),
+    [effectiveSelectedAssetIds, resolvedRequestSourceLocationName, workspace.requestableAssets],
+  );
   const basketAssets = useMemo(
-    () => workspace.requestableAssets.filter((asset) => selectedAssetIds.includes(asset.id)),
-    [selectedAssetIds, workspace.requestableAssets],
+    () => workspace.requestableAssets.filter((asset) => constrainedSelectedAssetIds.includes(asset.id)),
+    [constrainedSelectedAssetIds, workspace.requestableAssets],
   );
 
   const filteredAssets = useMemo(
     () =>
-      workspace.requestableAssets.filter((asset) =>
-        matchesSearchQuery(
-          [asset.tag, asset.name, asset.serial, asset.location, asset.department, getAssetStatusLabel(asset.status)],
-          assetSearch,
-        ),
+      workspace.requestableAssets.filter(
+        (asset) =>
+          (!resolvedRequestSourceLocationName || asset.location === resolvedRequestSourceLocationName) &&
+          matchesSearchQuery(
+            [asset.tag, asset.name, asset.serial, asset.location, asset.department, getAssetStatusLabel(asset.status)],
+            assetSearch,
+          ),
       ),
-    [assetSearch, workspace.requestableAssets],
+    [assetSearch, resolvedRequestSourceLocationName, workspace.requestableAssets],
   );
 
+  const effectiveSelectedReturnIds = useMemo(() => {
+    const nextIds = new Set(selectedReturnIds);
+    if (requestedAssetId && workspace.assignedForReturn.some((asset) => asset.id === requestedAssetId)) {
+      nextIds.add(requestedAssetId);
+    }
+    const nextValues = [...nextIds];
+    if (!resolvedRequestSourceLocationName) return nextValues;
+    return nextValues.filter((id) =>
+      workspace.assignedForReturn.some((asset) => asset.id === id && asset.location === resolvedRequestSourceLocationName),
+    );
+  }, [requestedAssetId, resolvedRequestSourceLocationName, selectedReturnIds, workspace.assignedForReturn]);
   const selectedReturnAssets = useMemo(
-    () => workspace.assignedForReturn.filter((asset) => selectedReturnIds.includes(asset.id)),
-    [selectedReturnIds, workspace.assignedForReturn],
+    () => workspace.assignedForReturn.filter((asset) => effectiveSelectedReturnIds.includes(asset.id)),
+    [effectiveSelectedReturnIds, workspace.assignedForReturn],
   );
+  const specialRequestableAssets = useMemo(
+    () =>
+      workspace.requestableAssets.filter(
+        (asset) =>
+          (!resolvedRequestSourceLocationName || asset.location === resolvedRequestSourceLocationName) &&
+          isSpecialRequestAssetCompatible(asset.status, specialType),
+      ),
+    [resolvedRequestSourceLocationName, specialType, workspace.requestableAssets],
+  );
+  const effectiveSpecialAssetId = useMemo(() => {
+    if (requestedTab === "special" && requestedAssetId && specialRequestableAssets.some((asset) => asset.id === requestedAssetId)) {
+      return requestedAssetId;
+    }
+    if (resolvedSpecialAssetId && specialRequestableAssets.some((asset) => asset.id === resolvedSpecialAssetId)) {
+      return resolvedSpecialAssetId;
+    }
+    return specialRequestableAssets[0]?.id ?? "";
+  }, [requestedAssetId, requestedTab, resolvedSpecialAssetId, specialRequestableAssets]);
   const resolvedPreferredReturnLocationId = preferredReturnLocationId || locations[0]?.id || "";
 
+  useEffect(() => {
+    if (!user || activeTab === "history") return;
+
+    if (activeTab === "asset") {
+      const draft = readDraft<AssetRequestDraft>(user.id, "asset");
+      queueMicrotask(() => {
+        setAssetSearch(draft?.assetSearch ?? "");
+        setSelectedAssetIds(draft?.selectedAssetIds ?? []);
+        setRequestSourceLocationId(draft?.sourceLocationId ?? "");
+        setNeededDate(draft?.neededDate ?? "");
+        setReason(draft?.reason ?? "");
+        setDuration(draft?.duration ?? "");
+        setEventContext(draft?.eventContext ?? "");
+      });
+    }
+
+    if (activeTab === "special") {
+      const draft = readDraft<SpecialRequestDraft>(user.id, "special");
+      queueMicrotask(() => {
+        setSpecialType(draft?.specialType ?? "Stationed Use");
+        setSelectedSpecialAssetId(draft?.selectedSpecialAssetId ?? "");
+        setRequestSourceLocationId(draft?.sourceLocationId ?? "");
+        setNeededDate(draft?.neededDate ?? "");
+        setReason(draft?.reason ?? "");
+        setDuration(draft?.duration ?? "");
+        setEventContext(draft?.eventContext ?? "");
+      });
+    }
+
+    if (activeTab === "returns") {
+      const draft = readDraft<ReturnRequestDraft>(user.id, "returns");
+      queueMicrotask(() => {
+        setSelectedReturnIds(draft?.selectedReturnIds ?? []);
+        setRequestSourceLocationId(draft?.sourceLocationId ?? "");
+        setReturnDate(draft?.returnDate ?? "");
+        setPreferredReturnLocationId(draft?.preferredReturnLocationId ?? "");
+        setReturnNote(draft?.returnNote ?? "");
+      });
+    }
+
+    queueMicrotask(() => {
+      setDraftHydratedTab(activeTab);
+    });
+  }, [activeTab, user]);
+
+  useEffect(() => {
+    if (!user || draftHydratedTab !== "asset" || activeTab !== "asset") return;
+    writeDraft<AssetRequestDraft>(user.id, "asset", {
+      assetSearch,
+      selectedAssetIds: effectiveSelectedAssetIds,
+      sourceLocationId: requestSourceLocationId,
+      neededDate,
+      reason,
+      duration,
+      eventContext,
+    });
+  }, [activeTab, assetSearch, draftHydratedTab, duration, effectiveSelectedAssetIds, eventContext, neededDate, reason, requestSourceLocationId, user]);
+
+  useEffect(() => {
+    if (!user || draftHydratedTab !== "special" || activeTab !== "special") return;
+    writeDraft<SpecialRequestDraft>(user.id, "special", {
+      specialType,
+      selectedSpecialAssetId,
+      sourceLocationId: requestSourceLocationId,
+      neededDate,
+      reason,
+      duration,
+      eventContext,
+    });
+  }, [activeTab, draftHydratedTab, duration, eventContext, neededDate, reason, requestSourceLocationId, selectedSpecialAssetId, specialType, user]);
+
+  useEffect(() => {
+    if (!user || draftHydratedTab !== "returns" || activeTab !== "returns") return;
+    writeDraft<ReturnRequestDraft>(user.id, "returns", {
+      selectedReturnIds,
+      sourceLocationId: requestSourceLocationId,
+      returnDate,
+      preferredReturnLocationId,
+      returnNote,
+    });
+  }, [activeTab, draftHydratedTab, preferredReturnLocationId, requestSourceLocationId, returnDate, returnNote, selectedReturnIds, user]);
+
+  const discardDraft = (tab: RequestDraftTab) => {
+    if (!user) return;
+    clearDraft(user.id, tab);
+
+    if (tab === "asset") {
+      setAssetSearch("");
+      setSelectedAssetIds([]);
+      setRequestSourceLocationId("");
+      setNeededDate("");
+      setReason("");
+      setDuration("");
+      setEventContext("");
+    }
+
+    if (tab === "special") {
+      setSpecialType("Stationed Use");
+      setSelectedSpecialAssetId("");
+      setRequestSourceLocationId("");
+      setNeededDate("");
+      setReason("");
+      setDuration("");
+      setEventContext("");
+    }
+
+    if (tab === "returns") {
+      setSelectedReturnIds([]);
+      setRequestSourceLocationId("");
+      setReturnDate("");
+      setPreferredReturnLocationId("");
+      setReturnNote("");
+    }
+
+    setFeedback({ tone: "info", message: `${tab === "asset" ? "Asset" : tab === "special" ? "Special" : "Return"} draft discarded.` });
+  };
+
   const submitLiveAssetRequest = async () => {
-    if (!activeLocationId) {
-      setFeedback({ tone: "error", message: "Choose a specific location scope before submitting an asset request." });
+    if (!resolvedRequestSourceLocationId) {
+      setFeedback({ tone: "error", message: "Choose a source location for this asset request first." });
       return;
     }
 
-    if (selectedAssetIds.length === 0) {
+    if (effectiveSelectedAssetIds.length === 0) {
       setFeedback({ tone: "error", message: "Add at least one asset to the request basket first." });
+      return;
+    }
+    if (resolvedRequestSourceLocationName && basketAssets.some((asset) => asset.location !== resolvedRequestSourceLocationName)) {
+      setFeedback({ tone: "error", message: "All asset-request items must belong to the selected source location." });
+      return;
+    }
+    if (!neededDate.trim()) {
+      setFeedback({ tone: "error", message: "Need Date is required." });
+      return;
+    }
+    if (isPastDateInput(neededDate)) {
+      setFeedback({ tone: "error", message: "Need Date cannot be in the past." });
+      return;
+    }
+    if (!reason.trim()) {
+      setFeedback({ tone: "error", message: "Reason is required." });
+      return;
+    }
+    if (!duration.trim()) {
+      setFeedback({ tone: "error", message: "Duration is required." });
+      return;
+    }
+    if (!eventContext.trim()) {
+      setFeedback({ tone: "error", message: "Event / Use Context is required." });
       return;
     }
 
@@ -199,8 +475,8 @@ export default function RequestsPage() {
     setSubmittingAssetRequest(true);
     try {
       const { error } = await submitAssetRequest(supabase, {
-        activeLocationId,
-        selectedAssetIds,
+        activeLocationId: resolvedRequestSourceLocationId,
+        selectedAssetIds: effectiveSelectedAssetIds,
         neededFor: eventContext,
         neededBy: neededDate,
         note: [reason.trim(), duration.trim()].filter(Boolean).join(" | "),
@@ -209,12 +485,14 @@ export default function RequestsPage() {
       if (error) throw error;
 
       setSelectedAssetIds([]);
+      setRequestSourceLocationId("");
       setNeededDate("");
       setReason("");
       setDuration("");
       setEventContext("");
+      if (user) clearDraft(user.id, "asset");
       setFeedback({ tone: "success", message: "Asset request submitted into the live request-bundle workflow." });
-      setActiveTab("history");
+      replaceRequestsRoute("history");
       await refreshWorkspace();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Asset request submission failed.";
@@ -225,13 +503,33 @@ export default function RequestsPage() {
   };
 
   const submitLiveReturnRequest = async () => {
-    if (selectedReturnIds.length === 0) {
+    if (effectiveSelectedReturnIds.length === 0) {
       setFeedback({ tone: "error", message: "Add at least one assigned asset to the return basket first." });
+      return;
+    }
+    if (!resolvedRequestSourceLocationId) {
+      setFeedback({ tone: "error", message: "Choose a source location for this return request first." });
+      return;
+    }
+    if (resolvedRequestSourceLocationName && selectedReturnAssets.some((asset) => asset.location !== resolvedRequestSourceLocationName)) {
+      setFeedback({ tone: "error", message: "All return-request items must belong to the selected source location." });
+      return;
+    }
+    if (!returnDate.trim()) {
+      setFeedback({ tone: "error", message: "Return Date is required." });
+      return;
+    }
+    if (isPastDateInput(returnDate)) {
+      setFeedback({ tone: "error", message: "Return Date cannot be in the past." });
       return;
     }
 
     if (!resolvedPreferredReturnLocationId) {
       setFeedback({ tone: "error", message: "Choose a preferred return location first." });
+      return;
+    }
+    if (!returnNote.trim()) {
+      setFeedback({ tone: "error", message: "Return note is required." });
       return;
     }
 
@@ -244,8 +542,8 @@ export default function RequestsPage() {
     setSubmittingReturnRequest(true);
     try {
       const { error } = await submitReturnRequest(supabase, {
-        activeLocationId,
-        selectedAssetIds: selectedReturnIds,
+        activeLocationId: resolvedRequestSourceLocationId,
+        selectedAssetIds: effectiveSelectedReturnIds,
         returnDate,
         preferredReturnLocationId: resolvedPreferredReturnLocationId,
         note: returnNote,
@@ -254,11 +552,13 @@ export default function RequestsPage() {
       if (error) throw error;
 
       setSelectedReturnIds([]);
+      setRequestSourceLocationId("");
       setReturnDate("");
       setPreferredReturnLocationId("");
       setReturnNote("");
+      if (user) clearDraft(user.id, "returns");
       setFeedback({ tone: "success", message: "Return request submitted into the live return workflow." });
-      setActiveTab("history");
+      replaceRequestsRoute("history");
       await refreshWorkspace();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Return request submission failed.";
@@ -269,8 +569,45 @@ export default function RequestsPage() {
   };
 
   const submitLiveSpecialRequest = async () => {
-    if (!resolvedSpecialAssetId) {
+    if (!effectiveSpecialAssetId) {
       setFeedback({ tone: "error", message: "Choose a target asset for the special request first." });
+      return;
+    }
+    if (!resolvedRequestSourceLocationId) {
+      setFeedback({ tone: "error", message: "Choose a source location for this special request first." });
+      return;
+    }
+    const specialAsset = workspace.requestableAssets.find((asset) => asset.id === effectiveSpecialAssetId);
+    if (!specialAsset) {
+      setFeedback({ tone: "error", message: "The selected special-request asset is no longer available in this workspace." });
+      return;
+    }
+    if (resolvedRequestSourceLocationName && specialAsset.location !== resolvedRequestSourceLocationName) {
+      setFeedback({ tone: "error", message: "The selected special-request asset must belong to the chosen source location." });
+      return;
+    }
+    if (!isSpecialRequestAssetCompatible(specialAsset.status, specialType)) {
+      setFeedback({ tone: "error", message: getSpecialRequestAssetHint(specialAsset.status, specialType) });
+      return;
+    }
+    if (!neededDate.trim()) {
+      setFeedback({ tone: "error", message: "Need Date is required." });
+      return;
+    }
+    if (isPastDateInput(neededDate)) {
+      setFeedback({ tone: "error", message: "Need Date cannot be in the past." });
+      return;
+    }
+    if (!duration.trim()) {
+      setFeedback({ tone: "error", message: "Duration is required." });
+      return;
+    }
+    if (!reason.trim()) {
+      setFeedback({ tone: "error", message: "Reason is required." });
+      return;
+    }
+    if (!eventContext.trim()) {
+      setFeedback({ tone: "error", message: "Event / Use Context is required." });
       return;
     }
 
@@ -283,8 +620,8 @@ export default function RequestsPage() {
     setSubmittingSpecialRequest(true);
     try {
       const { error } = await submitSpecialRequest(supabase, {
-        activeLocationId,
-        assetId: resolvedSpecialAssetId,
+        activeLocationId: resolvedRequestSourceLocationId,
+        assetId: effectiveSpecialAssetId,
         requestType: specialType,
         neededBy: neededDate,
         duration,
@@ -295,12 +632,14 @@ export default function RequestsPage() {
       if (error) throw error;
 
       setSelectedSpecialAssetId("");
+      setRequestSourceLocationId("");
       setNeededDate("");
       setDuration("");
       setReason("");
       setEventContext("");
+      if (user) clearDraft(user.id, "special");
       setFeedback({ tone: "success", message: `${specialType} submitted into the live special-request workflow.` });
-      setActiveTab("history");
+      replaceRequestsRoute("history");
       await refreshWorkspace();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Special request submission failed.";
@@ -391,10 +730,10 @@ export default function RequestsPage() {
         <section className="app-panel overflow-hidden">
           <div className="border-b border-primary/12 px-4 py-4 sm:px-5">
             <div className="flex flex-wrap gap-2">
-              <TabButton active={activeTab === "asset"} onClick={() => setActiveTab("asset")} label="Asset" />
-              <TabButton active={activeTab === "special"} onClick={() => setActiveTab("special")} label="Special" />
-              <TabButton active={activeTab === "returns"} onClick={() => setActiveTab("returns")} label="Returns" />
-              <TabButton active={activeTab === "history"} onClick={() => setActiveTab("history")} label="History" />
+              <TabButton active={activeTab === "asset"} onClick={() => replaceRequestsRoute("asset", requestedAssetId)} label="Asset" />
+              <TabButton active={activeTab === "special"} onClick={() => replaceRequestsRoute("special", requestedAssetId)} label="Special" />
+              <TabButton active={activeTab === "returns"} onClick={() => replaceRequestsRoute("returns", requestedAssetId)} label="Returns" />
+              <TabButton active={activeTab === "history"} onClick={() => replaceRequestsRoute("history")} label="History" />
             </div>
           </div>
 
@@ -422,7 +761,7 @@ export default function RequestsPage() {
                     <div className="grid gap-3">
                       {filteredAssets.map((asset) => {
                         const normalizedStatus = normalizeAssetStatus(asset.status);
-                        const selected = selectedAssetIds.includes(asset.id);
+                        const selected = effectiveSelectedAssetIds.includes(asset.id);
                         return (
                           <button
                             key={asset.id}
@@ -491,23 +830,43 @@ export default function RequestsPage() {
                       </div>
                     </div>
 
-                    <FormField label="Need Date" placeholder="Choose date and time" value={neededDate} onChange={setNeededDate} />
+                    {!activeLocationId && (
+                      <SelectCard
+                        label="Source location"
+                        value={resolvedRequestSourceLocationId}
+                        options={[
+                          { label: "Choose source location", value: "" },
+                          ...locations.map((location) => ({ label: location.name, value: location.id })),
+                        ]}
+                        onSelect={setRequestSourceLocationId}
+                      />
+                    )}
+
+                    <FormField label="Need Date" placeholder="Choose date and time" value={neededDate} onChange={setNeededDate} inputType="datetime-local" />
                     <FormField label="Reason" placeholder="Why is this needed?" value={reason} onChange={setReason} />
                     <FormField label="Duration" placeholder="How long is it needed?" value={duration} onChange={setDuration} />
                     <FormField label="Event / Use Context" placeholder="Sunday service, conference, rehearsal..." value={eventContext} onChange={setEventContext} multiline />
 
                     <button
                       type="button"
+                      onClick={() => discardDraft("asset")}
+                      className="inline-flex h-11 w-full items-center justify-center rounded-[1rem] border border-primary/18 bg-card/55 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary"
+                    >
+                      Discard Asset Draft
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => void submitLiveAssetRequest()}
-                      disabled={submittingAssetRequest || selectedAssetIds.length === 0 || !activeLocationId}
+                      disabled={submittingAssetRequest || effectiveSelectedAssetIds.length === 0 || !resolvedRequestSourceLocationId}
                       className="matrix-button inline-flex h-12 w-full items-center justify-center gap-2 rounded-[1.15rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <CheckCircle2 size={16} />
-                      {submittingAssetRequest ? "Submitting" : `Submit Asset Request${selectedAssetIds.length > 0 ? ` (${selectedAssetIds.length})` : ""}`}
+                      {submittingAssetRequest ? "Submitting" : `Submit Asset Request${effectiveSelectedAssetIds.length > 0 ? ` (${effectiveSelectedAssetIds.length})` : ""}`}
                     </button>
 
                     <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3 text-sm text-primary/90">
-                      Draft autosave, resume/discard, and one-active-draft-per-workflow behavior still remain to be added on top of the live request-bundle path.
+                      Asset requests now autosave locally per user and restore when you come back to this workflow. Submitting or discarding clears the saved draft.
                     </div>
                   </div>
                 </div>
@@ -528,22 +887,48 @@ export default function RequestsPage() {
                       label="Request type"
                       value={specialType}
                       options={["Stationed Use", "Permanent Reassignment"]}
-                      onSelect={(value) => setSpecialType(value as "Stationed Use" | "Permanent Reassignment")}
+                      onSelect={(value) => setSpecialType(value as SpecialRequestType)}
                     />
 
                     <SelectCard
                       label="Target asset"
-                      value={resolvedSpecialAssetId}
-                      options={workspace.requestableAssets.map((asset) => ({ label: `${asset.tag} · ${asset.name}`, value: asset.id }))}
+                      value={effectiveSpecialAssetId}
+                      options={specialRequestableAssets.map((asset) => ({ label: `${asset.tag} · ${asset.name}`, value: asset.id }))}
                       onSelect={setSelectedSpecialAssetId}
                     />
+                    {effectiveSpecialAssetId && (
+                      <div className="rounded-[1rem] border border-primary/12 bg-card/40 px-4 py-3 text-sm text-muted-foreground">
+                        {getSpecialRequestAssetHint(
+                          workspace.requestableAssets.find((asset) => asset.id === effectiveSpecialAssetId)?.status ?? "",
+                          specialType,
+                        )}
+                      </div>
+                    )}
+                    {specialRequestableAssets.length === 0 && (
+                      <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-6 text-sm text-muted-foreground">
+                        No assets in the current scope are compatible with {specialType}.
+                      </div>
+                    )}
                   </div>
 
                   <div className="app-panel p-4">
                     <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Dynamic form preview</div>
                     <div className="mt-3 font-display text-2xl text-foreground glow-soft">{specialType}</div>
+                    {!activeLocationId && (
+                      <div className="mt-3">
+                        <SelectCard
+                          label="Source location"
+                          value={resolvedRequestSourceLocationId}
+                          options={[
+                            { label: "Choose source location", value: "" },
+                            ...locations.map((location) => ({ label: location.name, value: location.id })),
+                          ]}
+                          onSelect={setRequestSourceLocationId}
+                        />
+                      </div>
+                    )}
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <FormField label="Need Date" placeholder="Choose date and time" value={neededDate} onChange={setNeededDate} />
+                      <FormField label="Need Date" placeholder="Choose date and time" value={neededDate} onChange={setNeededDate} inputType="datetime-local" />
                       <FormField label="Duration" placeholder="Temporary use period" value={duration} onChange={setDuration} />
                     </div>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -552,8 +937,15 @@ export default function RequestsPage() {
                     </div>
                     <button
                       type="button"
+                      onClick={() => discardDraft("special")}
+                      className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-[1rem] border border-primary/18 bg-card/55 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary"
+                    >
+                      Discard Special Draft
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => void submitLiveSpecialRequest()}
-                      disabled={submittingSpecialRequest || !resolvedSpecialAssetId}
+                      disabled={submittingSpecialRequest || !effectiveSpecialAssetId || !resolvedRequestSourceLocationId}
                       className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[1rem] border border-primary/18 bg-card/55 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <ShieldCheck size={15} />
@@ -578,7 +970,7 @@ export default function RequestsPage() {
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
                   <div className="space-y-3">
                     {workspace.assignedForReturn.map((asset) => {
-                      const selected = selectedReturnIds.includes(asset.id);
+                      const selected = effectiveSelectedReturnIds.includes(asset.id);
                       return (
                         <button
                           key={asset.id}
@@ -610,7 +1002,18 @@ export default function RequestsPage() {
                       <div className="mt-3 text-sm text-foreground">{selectedReturnAssets.length} asset item{selectedReturnAssets.length === 1 ? "" : "s"} selected</div>
                     </div>
 
-                    <FormField label="Return Date" placeholder="Choose return date" value={returnDate} onChange={setReturnDate} />
+                    {!activeLocationId && (
+                      <SelectCard
+                        label="Source location"
+                        value={resolvedRequestSourceLocationId}
+                        options={[
+                          { label: "Choose source location", value: "" },
+                          ...locations.map((location) => ({ label: location.name, value: location.id })),
+                        ]}
+                        onSelect={setRequestSourceLocationId}
+                      />
+                    )}
+                    <FormField label="Return Date" placeholder="Choose return date" value={returnDate} onChange={setReturnDate} inputType="date" />
                     <SelectCard
                       label="Preferred Return Location"
                       value={resolvedPreferredReturnLocationId}
@@ -618,19 +1021,26 @@ export default function RequestsPage() {
                       onSelect={setPreferredReturnLocationId}
                     />
                     <FormField label="Note" placeholder="Return note for the receiving team" value={returnNote} onChange={setReturnNote} multiline />
+                    <button
+                      type="button"
+                      onClick={() => discardDraft("returns")}
+                      className="inline-flex h-11 w-full items-center justify-center rounded-[1rem] border border-primary/18 bg-card/55 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary"
+                    >
+                      Discard Return Draft
+                    </button>
 
                     <button
                       type="button"
                       onClick={() => void submitLiveReturnRequest()}
-                      disabled={submittingReturnRequest || selectedReturnIds.length === 0 || !resolvedPreferredReturnLocationId}
+                        disabled={submittingReturnRequest || effectiveSelectedReturnIds.length === 0 || !resolvedPreferredReturnLocationId || !resolvedRequestSourceLocationId}
                       className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[1rem] border border-primary/18 bg-card/55 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <RotateCcw size={15} />
-                      {submittingReturnRequest ? "Submitting Return Request" : `Submit Return Request${selectedReturnIds.length > 0 ? ` (${selectedReturnIds.length})` : ""}`}
+                      {submittingReturnRequest ? "Submitting Return Request" : `Submit Return Request${effectiveSelectedReturnIds.length > 0 ? ` (${effectiveSelectedReturnIds.length})` : ""}`}
                     </button>
 
                     <div className="rounded-[1.2rem] border border-sky-500/18 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-                      This submit path creates the return workflow. Approvals &gt; Returns remains the terminal acceptance surface where the approver confirms the receiving path.
+                      Return requests now autosave locally per user and restore when you come back to this workflow. Approvals &gt; Returns remains the terminal acceptance surface where the approver confirms the receiving path.
                     </div>
                   </div>
                 </div>
@@ -763,12 +1173,14 @@ function FormField({
   value,
   onChange,
   multiline = false,
+  inputType = "text",
 }: {
   label: string;
   placeholder: string;
   value: string;
   onChange: (value: string) => void;
   multiline?: boolean;
+  inputType?: "text" | "date" | "datetime-local";
 }) {
   return (
     <label className="space-y-2">
@@ -782,6 +1194,7 @@ function FormField({
         />
       ) : (
         <input
+          type={inputType}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}

@@ -3,20 +3,12 @@
 import type { Session, User } from "@supabase/supabase-js";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
+import { resolveAccessContext, type AccessContextRow } from "@/lib/access-context";
 import type { AccessState, AppRole } from "@/lib/auth";
+import type { DamageLockCase } from "@/lib/damage-lock";
 import { getSupabaseBrowserClient, hasSupabaseEnv } from "@/lib/supabase/client";
 
 type AuthStatus = "loading" | "signed_in" | "signed_out" | "unconfigured";
-
-type AccessContextRow = {
-  approved: boolean;
-  roles: AppRole[] | null;
-  asset_manager_location_id: string | null;
-  assigned_location_id: string | null;
-  profile_exists: boolean;
-  display_name?: string | null;
-  surname?: string | null;
-};
 
 type AuthContextValue = {
   authStatus: AuthStatus;
@@ -30,7 +22,9 @@ type AuthContextValue = {
   profileName: string;
   assetManagerLocationId: string | null;
   assignedLocationId: string | null;
+  damageLockCase: DamageLockCase | null;
   isApproved: boolean;
+  isDamageLocked: boolean;
   isAdmin: boolean;
   isMainAdmin: boolean;
   isAssetManager: boolean;
@@ -56,12 +50,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileName, setProfileName] = useState("");
   const [assetManagerLocationId, setAssetManagerLocationId] = useState<string | null>(null);
   const [assignedLocationId, setAssignedLocationId] = useState<string | null>(null);
+  const [damageLockCase, setDamageLockCase] = useState<DamageLockCase | null>(null);
 
   const clearAccessState = useCallback(() => {
     setRoles([]);
     setProfileName("");
     setAssetManagerLocationId(null);
     setAssignedLocationId(null);
+    setDamageLockCase(null);
   }, []);
 
   const applyAccessContext = useCallback((access: AccessContextRow) => {
@@ -74,7 +70,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user?.email?.split("@")[0] ||
         "Operator",
     );
-    setAccessState(access.approved ? "approved" : "pending_approval");
     setAuthError(null);
   }, [user]);
 
@@ -84,61 +79,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthError(message);
   }, [clearAccessState]);
 
-  const loadLegacyAccessContext = useCallback(async (userId: string) => {
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
-
-    const [
-      { data: rolesData, error: rolesError },
-      { data: profileData, error: profileError },
-      { data: approvedData, error: approvedError },
-    ] = await Promise.all([
-      supabase.from("user_roles").select("role").eq("user_id", userId),
-      supabase
-        .from("profiles")
-        .select("asset_manager_location_id, assigned_location_id, display_name, surname")
-        .eq("id", userId)
-        .maybeSingle(),
-      supabase.rpc("is_approved", { _user_id: userId }),
-    ]);
-
-    if (rolesError) throw rolesError;
-    if (profileError) throw profileError;
-    if (approvedError) throw approvedError;
-
-    applyAccessContext({
-      approved: Boolean(approvedData),
-      roles: ((rolesData ?? []) as Array<{ role: AppRole }>).map((row) => row.role),
-      asset_manager_location_id: profileData?.asset_manager_location_id ?? null,
-      assigned_location_id: profileData?.assigned_location_id ?? profileData?.asset_manager_location_id ?? null,
-      profile_exists: Boolean(profileData),
-      display_name: profileData?.display_name ?? null,
-      surname: profileData?.surname ?? null,
-    });
-  }, [applyAccessContext]);
-
   const loadAccessContext = useCallback(async (userId: string) => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
-    const { data, error } = await supabase.rpc("get_my_access_context").single();
-    if (!error && data) {
-      applyAccessContext(data as AccessContextRow);
-      return;
-    }
+    const resolved = await resolveAccessContext(supabase, {
+      userId,
+      allowApprovalFallback: true,
+    });
 
-    const message = error?.message ?? "";
-    const missingFunction =
-      message.includes("Could not find the function public.get_my_access_context without parameters in the schema cache") ||
-      message.includes("function public.get_my_access_context() does not exist") ||
-      message.includes("Could not find the function");
-
-    if (!missingFunction) {
-      throw error;
-    }
-
-    await loadLegacyAccessContext(userId);
-  }, [applyAccessContext, loadLegacyAccessContext]);
+    applyAccessContext(resolved.accessContext);
+    setDamageLockCase(resolved.damageLockCase);
+    setAccessState(resolved.accessState);
+    setAuthError(resolved.warning);
+  }, [applyAccessContext]);
 
   useEffect(() => {
     if (!isConfigured) return;
@@ -219,7 +173,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profileName,
       assetManagerLocationId,
       assignedLocationId,
+      damageLockCase,
       isApproved: accessState === "approved",
+      isDamageLocked: accessState === "damage_locked",
       isAdmin: roles.includes("admin") || roles.includes("main_admin"),
       isMainAdmin: roles.includes("main_admin"),
       isAssetManager: roles.includes("asset_manager"),
@@ -259,7 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       retryAccessLoad,
     }),
-    [accessState, assetManagerLocationId, assignedLocationId, authError, authStatus, clearAccessState, isConfigured, loading, profileName, retryAccessLoad, roles, session, user],
+    [accessState, assetManagerLocationId, assignedLocationId, authError, authStatus, clearAccessState, damageLockCase, isConfigured, loading, profileName, retryAccessLoad, roles, session, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

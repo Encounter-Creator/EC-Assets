@@ -1,20 +1,25 @@
 "use client";
 
-import { AlertTriangle, ArrowRightLeft, ClipboardCheck, PackageCheck, RefreshCcw, RotateCcw, ShieldAlert, UserCheck, Users } from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, ClipboardCheck, PackageCheck, RefreshCcw, RotateCcw, Search, ShieldAlert, UserCheck, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useLocationScope } from "@/contexts/location-scope-context";
 import {
+  acceptReturnApproval,
   fallbackApprovalsWorkspace,
   loadApprovalsWorkspace,
   resolveDamageCaseItem,
+  resolveDamageCaseLost,
   reviewApprovalItem,
+  sendRecipientReminder,
   type ApprovalAction,
   type ApprovalQueueItem,
   type ApprovalTab,
   type ApprovalsWorkspaceData,
 } from "@/lib/approvals";
+import { matchesSearchQuery } from "@/lib/search";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -37,23 +42,92 @@ type FeedbackState = {
   message: string;
 };
 
+type QueueStatusFilter = "all" | "pending" | "awaiting" | "review" | "approved" | "declined";
+
+function isApprovalTab(value: string | null): value is ApprovalTab {
+  return value === "recipient" || value === "asset_requests" || value === "special_requests" || value === "returns" || value === "damage_locks";
+}
+
 export default function ApprovalsPage() {
   const { isAdmin, isAssetManager, isConfigured } = useAuth();
   const { activeLocationId, selectedLocationName } = useLocationScope();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedTabValue = searchParams.get("tab");
+  const requestedTab: ApprovalTab | null = isApprovalTab(requestedTabValue) ? requestedTabValue : null;
+  const requestedItemId = searchParams.get("itemId");
   const [workspace, setWorkspace] = useState<ApprovalsWorkspaceData>(fallbackApprovalsWorkspace);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<ApprovalTab>("recipient");
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedQueueItemIds, setSelectedQueueItemIds] = useState<string[]>([]);
   const [reviewNotesByItemId, setReviewNotesByItemId] = useState<Record<string, string>>({});
+  const [returnLocationByItemId, setReturnLocationByItemId] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState<ApprovalAction | null>(null);
+  const [bulkNote, setBulkNote] = useState("");
+  const [bulkReturnLocationId, setBulkReturnLocationId] = useState("");
+  const [queueQuery, setQueueQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all");
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
 
+  const activeTab: ApprovalTab = requestedTab ?? "recipient";
   const queueItems = workspace.queues[activeTab];
+  const filteredQueueItems = useMemo(
+    () =>
+      queueItems.filter((item) => {
+        const normalizedStatus = item.status.trim().toLowerCase();
+        const matchesQuery = matchesSearchQuery([item.summary, item.requester, item.meta, item.status, item.reviewTitle, item.note], queueQuery);
+        const matchesStatus =
+          statusFilter === "all" ||
+          (statusFilter === "pending" && normalizedStatus.includes("pending")) ||
+          (statusFilter === "awaiting" && normalizedStatus.includes("awaiting")) ||
+          (statusFilter === "review" && normalizedStatus.includes("review")) ||
+          (statusFilter === "approved" && (normalizedStatus.includes("approved") || normalizedStatus.includes("accepted"))) ||
+          (statusFilter === "declined" && (normalizedStatus.includes("declined") || normalizedStatus.includes("lost") || normalizedStatus.includes("damaged")));
+
+        return matchesQuery && matchesStatus;
+      }),
+    [queueItems, queueQuery, statusFilter],
+  );
+  const validSelectedQueueItemIds = useMemo(
+    () => selectedQueueItemIds.filter((id) => filteredQueueItems.some((item) => item.id === id)),
+    [filteredQueueItems, selectedQueueItemIds],
+  );
+  const selectedItemId = requestedItemId && filteredQueueItems.some((item) => item.id === requestedItemId) ? requestedItemId : filteredQueueItems[0]?.id ?? null;
   const selectedItem = useMemo(
-    () => queueItems.find((item) => item.id === selectedItemId) ?? queueItems[0] ?? null,
-    [queueItems, selectedItemId],
+    () => filteredQueueItems.find((item) => item.id === selectedItemId) ?? filteredQueueItems[0] ?? null,
+    [filteredQueueItems, selectedItemId],
   );
   const reviewNote = selectedItem ? reviewNotesByItemId[selectedItem.id] ?? selectedItem.note ?? "" : "";
+  const effectiveBulkReturnLocationId = bulkReturnLocationId || workspace.locations[0]?.id || "";
+  const selectedReturnLocationId = selectedItem ? returnLocationByItemId[selectedItem.id] ?? workspace.locations[0]?.id ?? "" : "";
+  const selectedQueueItems = useMemo(
+    () => filteredQueueItems.filter((item) => validSelectedQueueItemIds.includes(item.id)),
+    [filteredQueueItems, validSelectedQueueItemIds],
+  );
+  const queueStatusSummary = useMemo(
+    () => ({
+      total: queueItems.length,
+      visible: filteredQueueItems.length,
+      pending: queueItems.filter((item) => item.status.toLowerCase().includes("pending")).length,
+      awaiting: queueItems.filter((item) => item.status.toLowerCase().includes("awaiting")).length,
+      review: queueItems.filter((item) => item.status.toLowerCase().includes("review")).length,
+      actionable: queueItems.filter((item) => item.actions.length > 0).length,
+    }),
+    [filteredQueueItems.length, queueItems],
+  );
+  const availableBulkActions = useMemo(() => {
+    if (selectedQueueItems.length === 0) return [] as ApprovalAction[];
+
+    const sharedActions = selectedQueueItems.reduce<ApprovalAction[] | null>((acc, item) => {
+      if (!acc) {
+        return item.actions.filter((action) => activeTab === "returns" || action !== "accept_return");
+      }
+      return acc.filter((action) => item.actions.includes(action) && (activeTab === "returns" || action !== "accept_return"));
+    }, null);
+
+    if (!sharedActions) return [] as ApprovalAction[];
+    return sharedActions;
+  }, [activeTab, selectedQueueItems]);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,10 +154,24 @@ export default function ApprovalsPage() {
         setLoading(true);
       }
 
-      const nextWorkspace = await loadApprovalsWorkspace(supabase, activeLocationId);
-      if (!cancelled) {
-        setWorkspace(nextWorkspace);
-        setLoading(false);
+      try {
+        const nextWorkspace = await loadApprovalsWorkspace(supabase, activeLocationId);
+        if (!cancelled) {
+          setWorkspace(nextWorkspace);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Approvals could not be loaded right now.";
+        if (!cancelled) {
+          setWorkspace({
+            ...fallbackApprovalsWorkspace,
+            warnings: [...fallbackApprovalsWorkspace.warnings, message],
+          });
+          setFeedback({ tone: "error", message });
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
@@ -93,6 +181,34 @@ export default function ApprovalsPage() {
       cancelled = true;
     };
   }, [activeLocationId, isConfigured]);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("tab", activeTab);
+    if (selectedItemId) {
+      nextParams.set("itemId", selectedItemId);
+    } else {
+      nextParams.delete("itemId");
+    }
+
+    const nextQuery = nextParams.toString();
+    const currentQuery = searchParams.toString();
+    if (nextQuery !== currentQuery) {
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    }
+  }, [activeTab, pathname, router, searchParams, selectedItemId]);
+
+  const replaceQueueRoute = (tab: ApprovalTab, itemId?: string | null) => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("tab", tab);
+    if (itemId) {
+      nextParams.set("itemId", itemId);
+    } else {
+      nextParams.delete("itemId");
+    }
+    const nextQuery = nextParams.toString();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+  };
 
   const refreshWorkspace = async () => {
     if (!isConfigured) {
@@ -109,28 +225,89 @@ export default function ApprovalsPage() {
     }
 
     setLoading(true);
-    const nextWorkspace = await loadApprovalsWorkspace(supabase, activeLocationId);
-    setWorkspace(nextWorkspace);
-    setLoading(false);
+    try {
+      const nextWorkspace = await loadApprovalsWorkspace(supabase, activeLocationId);
+      setWorkspace(nextWorkspace);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Approvals could not be refreshed right now.";
+      setWorkspace({
+        ...fallbackApprovalsWorkspace,
+        warnings: [...fallbackApprovalsWorkspace.warnings, message],
+      });
+      setFeedback({ tone: "error", message });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const runAction = async (item: ApprovalQueueItem, action: ApprovalAction) => {
+  const executeAction = async (
+    item: ApprovalQueueItem,
+    action: ApprovalAction,
+    input?: {
+      note?: string;
+      finalLocationId?: string;
+    },
+  ) => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
       setFeedback({ tone: "error", message: "Supabase is not configured yet, so live approval actions are unavailable." });
-      return;
+      return false;
     }
 
     setBusyAction(action);
     try {
       if (action === "send_reminder") {
-        setFeedback({ tone: "info", message: "Recipient reminders are still a manager-facing scaffold. The queue is now live, but reminder delivery is not wired yet." });
-        return;
+        if (item.target.kind !== "approval") {
+          setFeedback({ tone: "info", message: "This reminder row is preview-only because the live approval target is unavailable." });
+          return false;
+        }
+
+        const { error } = await sendRecipientReminder(supabase, {
+          approvalId: item.target.id,
+          note: input?.note ?? reviewNotesByItemId[item.id] ?? item.note ?? "",
+        });
+        if (error) throw error;
+
+        setFeedback({
+          tone: "success",
+          message: "Recipient reminder recorded on the approval item.",
+        });
+        await refreshWorkspace();
+        return true;
       }
 
       if (item.target.kind === "approval") {
+        if (action === "accept_return") {
+          const finalLocationId = input?.finalLocationId ?? returnLocationByItemId[item.id] ?? workspace.locations[0]?.id ?? "";
+          if (!finalLocationId) {
+            setFeedback({ tone: "error", message: "Choose the final sign-in location before accepting the return." });
+            return false;
+          }
+
+          const { error } = await acceptReturnApproval(supabase, {
+            approvalId: item.target.id,
+            finalLocationId,
+            reviewNotes: input?.note ?? reviewNotesByItemId[item.id] ?? item.note ?? "",
+          });
+
+          if (error) throw error;
+
+          setFeedback({
+            tone: "success",
+            message: "Return request accepted and signed back into the selected final location.",
+          });
+          await refreshWorkspace();
+          return true;
+        }
+
+        const nextNote = input?.note ?? reviewNotesByItemId[item.id] ?? item.note ?? "";
+        if ((action === "decline" || action === "request_changes") && !nextNote.trim()) {
+          setFeedback({ tone: "error", message: `${action === "decline" ? "Decline" : "Request Changes"} requires a review note.` });
+          return false;
+        }
+
         const status =
-          action === "accept_return" || action === "approve"
+          action === "approve"
             ? "Approved"
             : action === "decline"
               ? "Declined"
@@ -139,7 +316,7 @@ export default function ApprovalsPage() {
         const { error } = await reviewApprovalItem(supabase, {
           approvalId: item.target.id,
           status,
-          reviewNotes: reviewNote,
+          reviewNotes: nextNote,
         });
 
         if (error) throw error;
@@ -147,28 +324,33 @@ export default function ApprovalsPage() {
         setFeedback({
           tone: "success",
           message:
-            action === "accept_return"
-              ? "Return request accepted."
-              : action === "approve"
-                ? "Approval completed."
-                : action === "decline"
-                  ? "Approval declined."
-                  : "Request marked for changes.",
+            action === "approve"
+              ? "Approval completed."
+              : action === "decline"
+                ? "Approval declined."
+                : "Request marked for changes.",
         });
         await refreshWorkspace();
-        return;
+        return true;
       }
 
       if (item.target.kind === "damage_case") {
         if (action === "resolve_lost") {
-          setFeedback({ tone: "info", message: "Resolve Lost is still waiting on explicit backend support. Available and Damaged resolutions are wired first." });
-          return;
+          const { error } = await resolveDamageCaseLost(supabase, {
+            caseId: item.target.id,
+          });
+
+          if (error) throw error;
+
+          setFeedback({ tone: "success", message: "Damage case resolved to Lost." });
+          await refreshWorkspace();
+          return true;
         }
 
         const { error } = await resolveDamageCaseItem(supabase, {
           caseId: item.target.id,
           resolvedState: action === "resolve_available" ? "Available" : "Damaged",
-          conditionNote: reviewNote,
+          conditionNote: input?.note ?? reviewNotesByItemId[item.id] ?? item.note ?? "",
         });
 
         if (error) throw error;
@@ -178,15 +360,82 @@ export default function ApprovalsPage() {
           message: action === "resolve_available" ? "Damage case resolved to Available." : "Damage case resolved to Damaged.",
         });
         await refreshWorkspace();
-        return;
+        return true;
       }
 
       setFeedback({ tone: "info", message: "This queue is visible now, but its write-side workflow is not wired against the active backend surface yet." });
+      return false;
     } catch (error) {
       const message = error instanceof Error ? error.message : "The approval action failed.";
       setFeedback({ tone: "error", message });
+      return false;
     } finally {
       setBusyAction(null);
+    }
+  };
+
+  const runAction = async (item: ApprovalQueueItem, action: ApprovalAction) => {
+    await executeAction(item, action, {
+      note: reviewNote,
+      finalLocationId: selectedReturnLocationId,
+    });
+  };
+
+  const toggleQueueItem = (itemId: string) => {
+    setSelectedQueueItemIds((current) => (current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]));
+  };
+
+  const toggleAllVisibleQueueItems = () => {
+    const visibleIds = filteredQueueItems.map((item) => item.id);
+    if (visibleIds.length === 0) {
+      setFeedback({ tone: "info", message: "No visible queue items match the current filters." });
+      return;
+    }
+
+    const allVisibleSelected = visibleIds.every((id) => selectedQueueItemIds.includes(id));
+    setSelectedQueueItemIds((current) => {
+      if (allVisibleSelected) {
+        return current.filter((id) => !visibleIds.includes(id));
+      }
+      return [...new Set([...current, ...visibleIds])];
+    });
+  };
+
+  const runBulkAction = async (action: ApprovalAction) => {
+    if (selectedQueueItems.length === 0) {
+      setFeedback({ tone: "info", message: "Select at least one queue item first." });
+      return;
+    }
+
+    if ((action === "decline" || action === "request_changes") && !bulkNote.trim()) {
+      setFeedback({ tone: "error", message: "Bulk decline and request-changes actions require a shared note." });
+      return;
+    }
+
+    if (action === "accept_return" && !effectiveBulkReturnLocationId) {
+      setFeedback({ tone: "error", message: "Choose the shared final sign-in location before accepting returns in bulk." });
+      return;
+    }
+
+    let successCount = 0;
+    for (const item of selectedQueueItems) {
+      const succeeded = await executeAction(item, action, {
+        note: bulkNote,
+        finalLocationId: action === "accept_return" ? effectiveBulkReturnLocationId : undefined,
+      });
+      if (succeeded) {
+        successCount += 1;
+      }
+    }
+
+    if (successCount > 0) {
+      setFeedback({
+        tone: "success",
+        message: `${successCount} queue item${successCount === 1 ? "" : "s"} processed with ${getActionLabel(action)}.`,
+      });
+      setSelectedQueueItemIds([]);
+      setBulkNote("");
+      await refreshWorkspace();
     }
   };
 
@@ -210,7 +459,7 @@ export default function ApprovalsPage() {
               <div className="app-kicker">Approvals</div>
               <h1 className="app-title mt-2">Queue list plus review panel rebuilt into the live shell.</h1>
               <p className="app-subtitle mt-3">
-                This page now loads live approval and damage queues where the backend surface exists, keeps the locked v2 tab layout, and falls back cleanly where write-side workflows are still incomplete.
+                This page now loads live approval and damage queues where the backend surface exists, keeps the locked v2 tab layout, and falls back cleanly only where the current schema still cannot support the final write path.
               </p>
             </div>
             <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
@@ -235,6 +484,12 @@ export default function ApprovalsPage() {
               <RefreshCcw size={14} className={cn(loading && "animate-spin")} />
               {loading ? "Refreshing" : "Refresh"}
             </button>
+            <span className="rounded-full border border-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              Selected: {validSelectedQueueItemIds.length}
+            </span>
+            <span className="rounded-full border border-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              Visible: {filteredQueueItems.length} / {queueItems.length}
+            </span>
           </div>
 
           {feedback && (
@@ -272,8 +527,7 @@ export default function ApprovalsPage() {
                   key={tab.id}
                   type="button"
                   onClick={() => {
-                    setActiveTab(tab.id);
-                    setSelectedItemId(workspace.queues[tab.id][0]?.id ?? null);
+                    replaceQueueRoute(tab.id, workspace.queues[tab.id][0]?.id ?? null);
                   }}
                   className={cn(
                     "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
@@ -288,6 +542,51 @@ export default function ApprovalsPage() {
                 </button>
               ))}
             </div>
+
+            <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
+              <label className="space-y-2">
+                <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Search queue</span>
+                <div className="matrix-field flex h-12 items-center gap-2 rounded-[1.15rem] px-4">
+                  <Search size={16} className="text-primary/72" />
+                  <input
+                    value={queueQuery}
+                    onChange={(event) => setQueueQuery(event.target.value)}
+                    placeholder="Search by requester, summary, status, note..."
+                    className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                  />
+                </div>
+              </label>
+
+              <FilterSelect
+                label="Status"
+                value={statusFilter}
+                onChange={(value) => setStatusFilter(value as QueueStatusFilter)}
+                options={["all", "pending", "awaiting", "review", "approved", "declined"]}
+                getLabel={(value) => {
+                  switch (value) {
+                    case "pending":
+                      return "Pending";
+                    case "awaiting":
+                      return "Awaiting";
+                    case "review":
+                      return "Under review";
+                    case "approved":
+                      return "Approved / accepted";
+                    case "declined":
+                      return "Declined / blocked";
+                    default:
+                      return "All statuses";
+                  }
+                }}
+              />
+
+              <div className="grid grid-cols-2 gap-2 rounded-[1.15rem] border border-primary/12 bg-card/35 p-3">
+                <Metric label="Pending" value={queueStatusSummary.pending} />
+                <Metric label="Awaiting" value={queueStatusSummary.awaiting} />
+                <Metric label="Review" value={queueStatusSummary.review} />
+                <Metric label="Actionable" value={queueStatusSummary.actionable} />
+              </div>
+            </div>
           </div>
 
           <div className="grid gap-0 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -295,23 +594,106 @@ export default function ApprovalsPage() {
               <div className="p-4 sm:p-5">
                 <div className="app-kicker">Queue list</div>
                 <div className="mt-2 text-sm text-muted-foreground">Rows now reflect live queues when the backend surface exists for the selected scope.</div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleAllVisibleQueueItems}
+                    className="rounded-full border border-primary/18 bg-card/55 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary"
+                  >
+                    {filteredQueueItems.length > 0 && filteredQueueItems.every((item) => selectedQueueItemIds.includes(item.id)) ? "Clear Visible" : "Select Visible"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedQueueItemIds([])}
+                    disabled={validSelectedQueueItemIds.length === 0}
+                    className="rounded-full border border-primary/12 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Clear Selection
+                  </button>
+                  <span className="rounded-full border border-primary/12 px-3 py-2 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    {queueStatusSummary.visible} visible of {queueStatusSummary.total}
+                  </span>
+                </div>
+                {availableBulkActions.length > 0 && (
+                  <div className="mt-4 space-y-3 rounded-[1rem] border border-primary/12 bg-card/45 p-4">
+                    <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Bulk actions</div>
+                    <textarea
+                      value={bulkNote}
+                      onChange={(event) => setBulkNote(event.target.value)}
+                      placeholder="Shared bulk note for declines, request changes, reminders, or resolution context"
+                      className="matrix-field min-h-24 w-full rounded-[1rem] px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                    />
+                    {activeTab === "returns" && availableBulkActions.includes("accept_return") && (
+                      <label className="space-y-2">
+                        <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Shared final sign-in location</span>
+                        <div className="matrix-field rounded-[1rem] px-4">
+                          <select
+                            value={effectiveBulkReturnLocationId}
+                            onChange={(event) => setBulkReturnLocationId(event.target.value)}
+                            className="h-12 w-full bg-transparent text-sm text-foreground outline-none"
+                          >
+                            {workspace.locations.map((location) => (
+                              <option key={location.id} value={location.id} className="bg-[hsl(var(--card))] text-foreground">
+                                {location.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </label>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {availableBulkActions.map((action) => (
+                        <button
+                          key={`bulk-${action}`}
+                          type="button"
+                          onClick={() => void runBulkAction(action)}
+                          disabled={busyAction !== null}
+                          className={cn(
+                            "rounded-[1rem] border px-4 py-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                            action.includes("decline") || action.includes("lost") || action === "resolve_damaged"
+                              ? "border-destructive/20 bg-card/55 text-destructive hover:bg-destructive/10"
+                              : "border-primary/18 bg-card/55 text-foreground hover:bg-primary/8 hover:text-primary",
+                          )}
+                        >
+                          Bulk {getActionLabel(action)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-3 px-4 pb-4 sm:px-5 sm:pb-5">
-                {queueItems.length === 0 ? (
+                {filteredQueueItems.length === 0 ? (
                   <div className="rounded-[1.2rem] border border-dashed border-primary/14 px-4 py-12 text-center text-sm text-muted-foreground">
-                    No queue items found for this tab and location scope.
+                    No queue items matched the current tab, scope, and filters.
                   </div>
                 ) : (
-                  queueItems.map((item) => (
+                  filteredQueueItems.map((item) => (
                     <button
                       key={item.id}
                       type="button"
-                      onClick={() => setSelectedItemId(item.id)}
+                      onClick={() => replaceQueueRoute(activeTab, item.id)}
                       className={cn("matrix-dashboard-bubble w-full p-4 text-left", selectedItem?.id === item.id && "border-primary/34")}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
+                          <div className="mb-2">
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
+                                selectedQueueItemIds.includes(item.id)
+                                  ? "border-primary/28 bg-primary/12 text-primary"
+                                  : "border-primary/12 text-muted-foreground",
+                              )}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                toggleQueueItem(item.id);
+                              }}
+                            >
+                              {selectedQueueItemIds.includes(item.id) ? "Selected" : "Select"}
+                            </span>
+                          </div>
                           <div className="font-display text-xl text-foreground glow-soft">{item.summary}</div>
                           <div className="mt-1 text-sm text-muted-foreground">{item.requester}</div>
                           <div className="mt-2 text-sm text-muted-foreground">{item.meta}</div>
@@ -361,6 +743,31 @@ export default function ApprovalsPage() {
                       className="matrix-field min-h-28 w-full rounded-[1.15rem] px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
                     />
                   </label>
+
+                  {activeTab === "returns" && (
+                    <label className="space-y-2">
+                      <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Final sign-in location</span>
+                      <div className="matrix-field rounded-[1.15rem] px-4">
+                        <select
+                          value={selectedReturnLocationId}
+                          onChange={(event) =>
+                            selectedItem &&
+                            setReturnLocationByItemId((current) => ({
+                              ...current,
+                              [selectedItem.id]: event.target.value,
+                            }))
+                          }
+                          className="h-12 w-full bg-transparent text-sm text-foreground outline-none"
+                        >
+                          {workspace.locations.map((location) => (
+                            <option key={location.id} value={location.id} className="bg-[hsl(var(--card))] text-foreground">
+                              {location.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+                  )}
 
                   <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
                     <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Inline actions</div>
@@ -443,6 +850,48 @@ function StatusBadge({ status }: { status: string }) {
           : "border-primary/18 bg-primary/10 text-primary";
 
   return <span className={cn("rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]", className)}>{status}</span>;
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  getLabel,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  getLabel?: (value: string) => string;
+}) {
+  return (
+    <label className="space-y-2">
+      <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">{label}</span>
+      <div className="matrix-field rounded-[1.15rem] px-4">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-12 w-full bg-transparent text-sm text-foreground outline-none"
+        >
+          {options.map((option) => (
+            <option key={option} value={option} className="bg-[hsl(var(--card))] text-foreground">
+              {getLabel ? getLabel(option) : option}
+            </option>
+          ))}
+        </select>
+      </div>
+    </label>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-[1rem] border border-primary/12 bg-card/40 px-3 py-3">
+      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
+      <div className="mt-2 font-display text-2xl text-foreground">{value}</div>
+    </div>
+  );
 }
 
 function ReviewMetric({ label, value }: { label: string; value: string }) {

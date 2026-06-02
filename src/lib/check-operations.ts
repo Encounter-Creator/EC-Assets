@@ -13,6 +13,11 @@ export type StandardAssetRecord = {
   department: string | null;
 };
 
+export type ResolvedOperationalAssetBatch = {
+  assets: StandardAssetRecord[];
+  unresolvedInputs: string[];
+};
+
 export type StandardRecipientRecord = {
   id: string;
   full_name: string;
@@ -58,6 +63,17 @@ export type SundayKitDeploymentRecord = {
   created_at: string;
 };
 
+export type SundayKitDeploymentItemRecord = {
+  id: string;
+  deployment_id: string;
+  asset_id: string | null;
+  asset_code: string | null;
+  asset_name: string;
+  serial_number: string | null;
+  sort_order: number;
+  return_status: "Pending" | "Available" | "Damaged";
+};
+
 export type CheckOperationsWorkspaceData = {
   signOutAssets: StandardAssetRecord[];
   signInAssets: StandardAssetRecord[];
@@ -98,6 +114,15 @@ type ProfileRow = {
   display_name: string | null;
   surname: string | null;
   full_name?: string | null;
+};
+
+type ReturnRequestJoinRow = {
+  id: string;
+  request_id: string | null;
+  preferred_return_location_id: string | null;
+  status: string | null;
+  note: string | null;
+  created_at: string;
 };
 
 export const fallbackSignOutAssets: StandardAssetRecord[] = [
@@ -154,6 +179,39 @@ export const fallbackSundayKitDeployments: SundayKitDeploymentRecord[] = [
     damaged_count: 0,
     note: "Main auditorium deployment.",
     created_at: "2026-06-02T06:00:00Z",
+  },
+];
+
+export const fallbackSundayKitDeploymentItems: SundayKitDeploymentItemRecord[] = [
+  {
+    id: "kdi1",
+    deployment_id: "kd1",
+    asset_id: null,
+    asset_code: "KIT-CAM-01",
+    asset_name: "Camera Body",
+    serial_number: "CMB-00192",
+    sort_order: 1,
+    return_status: "Pending",
+  },
+  {
+    id: "kdi2",
+    deployment_id: "kd1",
+    asset_id: null,
+    asset_code: "KIT-CAM-02",
+    asset_name: "Tripod",
+    serial_number: "TR-50001",
+    sort_order: 2,
+    return_status: "Pending",
+  },
+  {
+    id: "kdi3",
+    deployment_id: "kd1",
+    asset_id: null,
+    asset_code: "KIT-CAM-03",
+    asset_name: "Battery Kit",
+    serial_number: "BAT-10001",
+    sort_order: 3,
+    return_status: "Pending",
   },
 ];
 
@@ -271,6 +329,151 @@ async function loadSundayKitDeployments(supabase: SupabaseClient) {
   }));
 }
 
+async function loadStandardAssetsByStatus(
+  supabase: SupabaseClient,
+  input: {
+    statuses: string[];
+    holderRequired?: boolean;
+  },
+) {
+  const { data, error } = await supabase
+    .from("assets")
+    .select("id, code, name, serial_number, status, current_location_id, current_holder, department_id")
+    .in("status", input.statuses)
+    .order("name");
+
+  if (error) throw error;
+
+  const rows = ((data ?? []) as AssetRow[]).filter((row) => (input.holderRequired ? Boolean(row.current_holder) : true));
+  const locationIds = [...new Set(rows.map((row) => row.current_location_id).filter(Boolean))] as string[];
+  const departmentIds = [...new Set(rows.map((row) => row.department_id).filter(Boolean))] as string[];
+  const profileIds = [...new Set(rows.map((row) => row.current_holder).filter(Boolean))] as string[];
+  const maps = await loadReferenceMaps(supabase, locationIds, departmentIds, profileIds);
+
+  return rows.map((row) => ({
+    id: row.id,
+    tag: row.code ?? "No tag",
+    name: row.name ?? "Unnamed asset",
+    serial_number: row.serial_number ?? "-",
+    state: row.status ? row.status.replace(/_/g, " ").replace(/\b\w/g, (value) => value.toUpperCase()) : "Unknown",
+    current_location: row.current_location_id ? maps.locations[row.current_location_id] ?? "Unknown location" : "No location",
+    holder: row.current_holder ? maps.profiles[row.current_holder] ?? "Assigned user" : null,
+    department: row.department_id ? maps.departments[row.department_id] ?? "No department" : "No department",
+  }));
+}
+
+async function loadStandardRecipientsDirect(supabase: SupabaseClient) {
+  const [{ data: profileRows, error: profilesError }, { data: roleRows, error: rolesError }, { data: locationRows, error: locationsError }] = await Promise.all([
+    supabase.from("profiles").select("id, display_name, surname, full_name, assigned_location_id, asset_manager_location_id"),
+    supabase.from("user_roles").select("user_id, role"),
+    supabase.from("locations").select("id, name"),
+  ]);
+
+  if (profilesError) throw profilesError;
+  if (rolesError) throw rolesError;
+  if (locationsError) throw locationsError;
+
+  const locationMap = Object.fromEntries(((locationRows ?? []) as LocationRow[]).map((row) => [row.id, row.name]));
+  const roleMap = new Map<string, string>();
+  for (const row of ((roleRows ?? []) as Array<{ user_id: string; role: string }>)) {
+    if (!roleMap.has(row.user_id)) {
+      roleMap.set(row.user_id, row.role);
+    }
+  }
+
+  return ((profileRows ?? []) as Array<ProfileRow & { assigned_location_id?: string | null; asset_manager_location_id?: string | null }>).map((row) => ({
+    id: row.id,
+    full_name: formatProfileName(row),
+    email: "-",
+    role: roleMap.get(row.id) ?? "staff",
+    home_base: row.assigned_location_id ? locationMap[row.assigned_location_id] ?? "Unknown location" : row.asset_manager_location_id ? locationMap[row.asset_manager_location_id] ?? "Unknown location" : null,
+    department: null,
+  }));
+}
+
+async function loadStandardLocationsDirect(supabase: SupabaseClient) {
+  const { data, error } = await supabase.from("locations").select("id, name").eq("active", true).order("name");
+  if (error) throw error;
+  return ((data ?? []) as StandardLocationRecord[]).filter((row) => row.id && row.name);
+}
+
+async function loadReturnMonitorDirect(supabase: SupabaseClient) {
+  const [{ data: returnRows, error: returnsError }, { data: locationRows, error: locationsError }, { data: requestRows, error: requestsError }] = await Promise.all([
+    supabase.from("return_requests").select("id, request_id, preferred_return_location_id, status, note, created_at").order("created_at", { ascending: false }),
+    supabase.from("locations").select("id, name"),
+    supabase.from("requests").select("id, status"),
+  ]);
+
+  if (returnsError) throw returnsError;
+  if (locationsError) throw locationsError;
+  if (requestsError) throw requestsError;
+
+  const locationMap = Object.fromEntries(((locationRows ?? []) as LocationRow[]).map((row) => [row.id, row.name]));
+  const requestMap = Object.fromEntries((((requestRows ?? []) as Array<{ id: string; status: string | null }>)).map((row) => [row.id, row]));
+
+  return ((returnRows ?? []) as ReturnRequestJoinRow[]).map((row) => ({
+    id: row.id,
+    request_id: row.request_id,
+    preferred_return_location: row.preferred_return_location_id ? locationMap[row.preferred_return_location_id] ?? "Unknown location" : null,
+    status: row.status ?? "Pending",
+    note: row.note,
+    created_at: row.created_at,
+    workflow_status: row.request_id ? requestMap[row.request_id]?.status ?? null : null,
+  }));
+}
+
+async function loadSundayKitsDirect(supabase: SupabaseClient) {
+  const { data, error } = await supabase.from("kits").select("id, name, home_base, active, item_count").order("name");
+  if (error) throw error;
+  return ((data ?? []) as SundayKitRecord[]).map((row) => ({
+    id: row.id,
+    name: row.name ?? "Unnamed kit",
+    home_base: row.home_base ?? null,
+    active: Boolean(row.active),
+    item_count: row.item_count ?? 0,
+  }));
+}
+
+export async function loadSundayKitDeploymentItems(
+  supabase: SupabaseClient,
+  deploymentId: string,
+): Promise<{
+  items: SundayKitDeploymentItemRecord[];
+  source: "live" | "fallback";
+  warnings: string[];
+}> {
+  try {
+    const { data, error } = await supabase
+      .from("kit_deployment_items")
+      .select("id, deployment_id, asset_id, asset_code, asset_name, serial_number, sort_order, return_status")
+      .eq("deployment_id", deploymentId)
+      .order("sort_order");
+
+    if (error) throw error;
+
+    return {
+      items: ((data ?? []) as SundayKitDeploymentItemRecord[]).map((row) => ({
+        ...row,
+        asset_name: row.asset_name ?? "Kit item",
+        return_status: row.return_status ?? "Pending",
+      })),
+      source: "live",
+      warnings: [],
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Sunday kit deployment items could not be loaded.";
+    if (!isMissingSchemaError(message)) {
+      throw error;
+    }
+
+    return {
+      items: fallbackSundayKitDeploymentItems.filter((item) => item.deployment_id === deploymentId),
+      source: "fallback",
+      warnings: ["Sunday kit item-level returns are using fallback data because the deployment-item schema is not available yet."],
+    };
+  }
+}
+
 export async function loadCheckOperationsWorkspace(supabase: SupabaseClient): Promise<CheckOperationsWorkspaceData> {
   const warnings: string[] = [];
 
@@ -287,21 +490,39 @@ export async function loadCheckOperationsWorkspace(supabase: SupabaseClient): Pr
   ]);
 
   const signOutAssets =
-    signOutResult.status === "fulfilled"
+    signOutResult.status === "fulfilled" && !signOutResult.value.error
       ? ((signOutResult.value.data ?? []) as StandardAssetRecord[])
       : (() => {
-          const message = signOutResult.reason instanceof Error ? signOutResult.reason.message : "Standard sign-out assets could not be loaded.";
-          warnings.push(isMissingSchemaError(message) ? "Standard sign-out assets are using fallback data because the RPC is not available yet." : message);
-          return fallbackSignOutAssets;
+          const message =
+            signOutResult.status === "fulfilled"
+              ? signOutResult.value.error?.message ?? "Standard sign-out assets could not be loaded."
+              : signOutResult.reason instanceof Error
+                ? signOutResult.reason.message
+                : "Standard sign-out assets could not be loaded.";
+          if (!isMissingSchemaError(message)) {
+            warnings.push(message);
+            return fallbackSignOutAssets;
+          }
+          warnings.push("Standard sign-out assets are using direct live queries because the RPC is not available yet.");
+          return loadStandardAssetsByStatus(supabase, { statuses: ["available"] });
         })();
 
   const signInAssets =
-    signInResult.status === "fulfilled"
+    signInResult.status === "fulfilled" && !signInResult.value.error
       ? ((signInResult.value.data ?? []) as StandardAssetRecord[])
       : (() => {
-          const message = signInResult.reason instanceof Error ? signInResult.reason.message : "Standard sign-in assets could not be loaded.";
-          warnings.push(isMissingSchemaError(message) ? "Standard sign-in assets are using fallback data because the RPC is not available yet." : message);
-          return fallbackSignInAssets;
+          const message =
+            signInResult.status === "fulfilled"
+              ? signInResult.value.error?.message ?? "Standard sign-in assets could not be loaded."
+              : signInResult.reason instanceof Error
+                ? signInResult.reason.message
+                : "Standard sign-in assets could not be loaded.";
+          if (!isMissingSchemaError(message)) {
+            warnings.push(message);
+            return fallbackSignInAssets;
+          }
+          warnings.push("Standard sign-in assets are using direct live queries because the RPC is not available yet.");
+          return loadStandardAssetsByStatus(supabase, { statuses: ["assigned", "traveling", "signed_out", "permanent"], holderRequired: true });
         })();
 
   const stationedReadyAssets =
@@ -323,12 +544,21 @@ export async function loadCheckOperationsWorkspace(supabase: SupabaseClient): Pr
         })();
 
   const sundayKits =
-    sundayKitsResult.status === "fulfilled"
+    sundayKitsResult.status === "fulfilled" && !sundayKitsResult.value.error
       ? ((sundayKitsResult.value.data ?? []) as SundayKitRecord[])
       : (() => {
-          const message = sundayKitsResult.reason instanceof Error ? sundayKitsResult.reason.message : "Sunday kits could not be loaded.";
-          warnings.push(isMissingSchemaError(message) ? "Sunday kits are using fallback data because the settings kit surface is not available yet." : message);
-          return fallbackSundayKits;
+          const message =
+            sundayKitsResult.status === "fulfilled"
+              ? sundayKitsResult.value.error?.message ?? "Sunday kits could not be loaded."
+              : sundayKitsResult.reason instanceof Error
+                ? sundayKitsResult.reason.message
+                : "Sunday kits could not be loaded.";
+          if (!isMissingSchemaError(message)) {
+            warnings.push(message);
+            return fallbackSundayKits;
+          }
+          warnings.push("Sunday kits are using direct live queries because the settings kit RPC is not available yet.");
+          return loadSundayKitsDirect(supabase);
         })();
 
   const sundayKitDeployments =
@@ -341,45 +571,94 @@ export async function loadCheckOperationsWorkspace(supabase: SupabaseClient): Pr
         })();
 
   const recipients =
-    recipientsResult.status === "fulfilled"
+    recipientsResult.status === "fulfilled" && !recipientsResult.value.error
       ? ((recipientsResult.value.data ?? []) as StandardRecipientRecord[])
       : (() => {
-          const message = recipientsResult.reason instanceof Error ? recipientsResult.reason.message : "Recipients could not be loaded.";
-          warnings.push(isMissingSchemaError(message) ? "Recipients are using fallback data because the RPC is not available yet." : message);
-          return fallbackRecipients;
+          const message =
+            recipientsResult.status === "fulfilled"
+              ? recipientsResult.value.error?.message ?? "Recipients could not be loaded."
+              : recipientsResult.reason instanceof Error
+                ? recipientsResult.reason.message
+                : "Recipients could not be loaded.";
+          if (!isMissingSchemaError(message)) {
+            warnings.push(message);
+            return fallbackRecipients;
+          }
+          warnings.push("Recipients are using direct live queries because the RPC is not available yet.");
+          return loadStandardRecipientsDirect(supabase);
         })();
 
   const locations =
-    locationsResult.status === "fulfilled"
+    locationsResult.status === "fulfilled" && !locationsResult.value.error
       ? ((locationsResult.value.data ?? []) as StandardLocationRecord[])
       : (() => {
-          const message = locationsResult.reason instanceof Error ? locationsResult.reason.message : "Locations could not be loaded.";
-          warnings.push(isMissingSchemaError(message) ? "Locations are using fallback data because the RPC is not available yet." : message);
-          return fallbackLocations;
+          const message =
+            locationsResult.status === "fulfilled"
+              ? locationsResult.value.error?.message ?? "Locations could not be loaded."
+              : locationsResult.reason instanceof Error
+                ? locationsResult.reason.message
+                : "Locations could not be loaded.";
+          if (!isMissingSchemaError(message)) {
+            warnings.push(message);
+            return fallbackLocations;
+          }
+          warnings.push("Locations are using direct live queries because the RPC is not available yet.");
+          return loadStandardLocationsDirect(supabase);
         })();
 
   const returnMonitor =
-    returnsResult.status === "fulfilled"
+    returnsResult.status === "fulfilled" && !returnsResult.value.error
       ? ((returnsResult.value.data ?? []) as ReturnRequestMonitorRecord[])
       : (() => {
-          const message = returnsResult.reason instanceof Error ? returnsResult.reason.message : "Return monitor could not be loaded.";
-          warnings.push(isMissingSchemaError(message) ? "Return monitoring is using fallback data because the RPC is not available yet." : message);
-          return fallbackReturnMonitor;
+          const message =
+            returnsResult.status === "fulfilled"
+              ? returnsResult.value.error?.message ?? "Return monitor could not be loaded."
+              : returnsResult.reason instanceof Error
+                ? returnsResult.reason.message
+                : "Return monitor could not be loaded.";
+          if (!isMissingSchemaError(message)) {
+            warnings.push(message);
+            return fallbackReturnMonitor;
+          }
+          warnings.push("Return monitoring is using direct live queries because the RPC is not available yet.");
+          return loadReturnMonitorDirect(supabase);
         })();
 
-  const successCount = [signOutResult, signInResult, stationedReadyResult, stationedActiveResult, sundayKitsResult, sundayKitDeploymentsResult, recipientsResult, locationsResult, returnsResult].filter((result) => result.status === "fulfilled").length;
+  const resolvedWorkspace = await Promise.all([
+    Promise.resolve(signOutAssets),
+    Promise.resolve(signInAssets),
+    Promise.resolve(stationedReadyAssets),
+    Promise.resolve(stationedActiveAssets),
+    Promise.resolve(sundayKits),
+    Promise.resolve(sundayKitDeployments),
+    Promise.resolve(recipients),
+    Promise.resolve(locations),
+    Promise.resolve(returnMonitor),
+  ]);
+
+  const successCount = [
+    signOutResult.status === "fulfilled" && !signOutResult.value.error,
+    signInResult.status === "fulfilled" && !signInResult.value.error,
+    stationedReadyResult.status === "fulfilled",
+    stationedActiveResult.status === "fulfilled",
+    sundayKitsResult.status === "fulfilled" && !sundayKitsResult.value.error,
+    sundayKitDeploymentsResult.status === "fulfilled",
+    recipientsResult.status === "fulfilled" && !recipientsResult.value.error,
+    locationsResult.status === "fulfilled" && !locationsResult.value.error,
+    returnsResult.status === "fulfilled" && !returnsResult.value.error,
+  ].filter(Boolean).length;
   const source = successCount === 9 ? "live" : successCount === 0 ? "fallback" : "mixed";
 
   return {
-    signOutAssets,
-    signInAssets,
-    stationedReadyAssets,
-    stationedActiveAssets,
-    sundayKits,
-    sundayKitDeployments,
-    recipients,
-    locations,
-    returnMonitor,
+    signOutAssets: resolvedWorkspace[0],
+    signInAssets: resolvedWorkspace[1],
+    stationedReadyAssets: resolvedWorkspace[2],
+    stationedActiveAssets: resolvedWorkspace[3],
+    sundayKits: resolvedWorkspace[4],
+    sundayKitDeployments: resolvedWorkspace[5],
+    recipients: resolvedWorkspace[6],
+    locations: resolvedWorkspace[7],
+    returnMonitor: resolvedWorkspace[8],
     source,
     warnings,
   };
@@ -460,7 +739,7 @@ export async function runStationedCheckIn(
   input: {
     assetIds: string[];
     finalLocationId: string;
-    outcome: "Stationed" | "Damaged";
+    outcome: "Stationed" | "Available" | "Damaged";
     note?: string;
   },
 ) {
@@ -477,25 +756,46 @@ export async function resolveOperationalAssetsByCodes(
   input: {
     codes: string[];
   },
-) {
-  const normalizedCodes = input.codes.map((code) => code.trim()).filter(Boolean);
-  if (normalizedCodes.length === 0) return [];
+) : Promise<ResolvedOperationalAssetBatch> {
+  const normalizedCodes = [...new Set(input.codes.map((code) => code.trim()).filter(Boolean))];
+  if (normalizedCodes.length === 0) {
+    return {
+      assets: [],
+      unresolvedInputs: [],
+    };
+  }
 
-  const { data, error } = await supabase
-    .from("assets")
-    .select("id, code, name, serial_number, status, current_location_id, current_holder, department_id")
-    .in("code", normalizedCodes)
-    .order("name");
+  const uuidCandidates = normalizedCodes.filter((value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
 
-  if (error) throw error;
+  const [codeResult, idResult] = await Promise.all([
+    supabase
+      .from("assets")
+      .select("id, code, name, serial_number, status, current_location_id, current_holder, department_id")
+      .in("code", normalizedCodes)
+      .order("name"),
+    uuidCandidates.length > 0
+      ? supabase
+          .from("assets")
+          .select("id, code, name, serial_number, status, current_location_id, current_holder, department_id")
+          .in("id", uuidCandidates)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
 
-  const rows = (data ?? []) as AssetRow[];
+  if (codeResult.error) throw codeResult.error;
+  if (idResult.error) throw idResult.error;
+
+  const rowMap = new Map<string, AssetRow>();
+  for (const row of [...((codeResult.data ?? []) as AssetRow[]), ...((idResult.data ?? []) as AssetRow[])]) {
+    rowMap.set(row.id, row);
+  }
+
+  const rows = [...rowMap.values()];
   const locationIds = [...new Set(rows.map((row) => row.current_location_id).filter(Boolean))] as string[];
   const departmentIds = [...new Set(rows.map((row) => row.department_id).filter(Boolean))] as string[];
   const profileIds = [...new Set(rows.map((row) => row.current_holder).filter(Boolean))] as string[];
   const maps = await loadReferenceMaps(supabase, locationIds, departmentIds, profileIds);
 
-  return rows.map((row) => ({
+  const assets = rows.map((row) => ({
     id: row.id,
     tag: row.code ?? "No tag",
     name: row.name ?? "Unnamed asset",
@@ -505,6 +805,21 @@ export async function resolveOperationalAssetsByCodes(
     holder: row.current_holder ? maps.profiles[row.current_holder] ?? "Assigned user" : null,
     department: row.department_id ? maps.departments[row.department_id] ?? "No department" : "No department",
   }));
+
+  const matchedInputs = new Set<string>();
+  for (const row of rows) {
+    matchedInputs.add(row.id);
+    if (row.code) {
+      matchedInputs.add(row.code);
+    }
+  }
+
+  return {
+    assets: normalizedCodes
+      .flatMap((inputCode) => assets.filter((asset) => asset.id === inputCode || asset.tag === inputCode))
+      .filter((asset, index, all) => all.findIndex((entry) => entry.id === asset.id) === index),
+    unresolvedInputs: normalizedCodes.filter((inputCode) => !matchedInputs.has(inputCode)),
+  };
 }
 
 export async function deploySundayKit(
@@ -541,6 +856,27 @@ export async function returnSundayKitDeployment(
     p_deployment_id: input.deploymentId,
     p_returned_count: input.returnedCount,
     p_damaged_count: input.damagedCount,
+    p_note: input.note?.trim() || null,
+  });
+}
+
+export async function returnSundayKitDeploymentItems(
+  supabase: SupabaseClient,
+  input: {
+    deploymentId: string;
+    itemResolutions: Array<{
+      itemId: string;
+      outcome: "Available" | "Damaged";
+    }>;
+    note?: string;
+  },
+) {
+  return supabase.rpc("return_sunday_kit_item_resolutions", {
+    p_deployment_id: input.deploymentId,
+    p_item_resolutions: input.itemResolutions.map((resolution) => ({
+      item_id: resolution.itemId,
+      outcome: resolution.outcome,
+    })),
     p_note: input.note?.trim() || null,
   });
 }

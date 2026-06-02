@@ -11,7 +11,9 @@ export type InventoryAsset = {
   serial: string;
   status: AssetStatus;
   location: string;
+  locationId?: string | null;
   department: string;
+  departmentId?: string | null;
   holder: string;
 };
 
@@ -53,14 +55,14 @@ type AssetHistoryRow = {
 };
 
 export const fallbackInventoryAssets: InventoryAsset[] = [
-  { id: "1", tag: "CMR101", name: "Camera Body", serial: "CMB-00192", status: "available", location: "Centurion", department: "Production", holder: "-" },
-  { id: "2", tag: "CMR102", name: "Camera Body", serial: "CMB-00193", status: "assigned", location: "Centurion", department: "Production", holder: "John Doe" },
-  { id: "3", tag: "MIC301", name: "Wireless Mic", serial: "WM-00481", status: "traveling", location: "Traveling", department: "Audio", holder: "Sarah M" },
-  { id: "4", tag: "MIC302", name: "Wireless Mic", serial: "WM-00482", status: "damaged", location: "Krugersdorp", department: "Audio", holder: "-" },
-  { id: "5", tag: "LGT221", name: "LED Panel", serial: "LP-19821", status: "available", location: "Lanseria", department: "Lighting", holder: "-" },
-  { id: "6", tag: "LGT222", name: "LED Panel", serial: "LP-19822", status: "stationed", location: "Lanseria", department: "Lighting", holder: "-" },
-  { id: "7", tag: "CAM401", name: "Tripod", serial: "TR-82711", status: "available", location: "Office", department: "Production", holder: "-" },
-  { id: "8", tag: "CAM402", name: "Tripod", serial: "TR-82712", status: "assigned", location: "Krugersdorp", department: "Production", holder: "Barend N" },
+  { id: "1", tag: "CMR101", name: "Camera Body", serial: "CMB-00192", status: "available", location: "Centurion", locationId: "l1", department: "Production", departmentId: "d1", holder: "-" },
+  { id: "2", tag: "CMR102", name: "Camera Body", serial: "CMB-00193", status: "assigned", location: "Centurion", locationId: "l1", department: "Production", departmentId: "d1", holder: "John Doe" },
+  { id: "3", tag: "MIC301", name: "Wireless Mic", serial: "WM-00481", status: "traveling", location: "Traveling", locationId: "l5", department: "Audio", departmentId: "d2", holder: "Sarah M" },
+  { id: "4", tag: "MIC302", name: "Wireless Mic", serial: "WM-00482", status: "damaged", location: "Krugersdorp", locationId: "l2", department: "Audio", departmentId: "d2", holder: "-" },
+  { id: "5", tag: "LGT221", name: "LED Panel", serial: "LP-19821", status: "available", location: "Lanseria", locationId: "l3", department: "Lighting", departmentId: "d3", holder: "-" },
+  { id: "6", tag: "LGT222", name: "LED Panel", serial: "LP-19822", status: "stationed", location: "Lanseria", locationId: "l3", department: "Lighting", departmentId: "d3", holder: "-" },
+  { id: "7", tag: "CAM401", name: "Tripod", serial: "TR-82711", status: "available", location: "Office", locationId: "l4", department: "Production", departmentId: "d1", holder: "-" },
+  { id: "8", tag: "CAM402", name: "Tripod", serial: "TR-82712", status: "assigned", location: "Krugersdorp", locationId: "l2", department: "Production", departmentId: "d1", holder: "Barend N" },
 ];
 
 export const fallbackInventoryHistory: InventoryHistoryRecord[] = [
@@ -130,10 +132,31 @@ async function loadInventoryAssets(supabase: SupabaseClient, activeLocationId: s
     name: row.name ?? "Unnamed asset",
     serial: row.serial_number ?? "-",
     status: (row.status ?? "available") as AssetStatus,
+    locationId: row.current_location_id ?? null,
     location: row.current_location_id ? maps.locations[row.current_location_id] ?? "Unknown location" : "No location",
+    departmentId: row.department_id ?? null,
     department: row.department_id ? maps.departments[row.department_id] ?? "Unknown department" : "No department",
     holder: row.current_holder ? maps.profiles[row.current_holder] ?? "Assigned user" : "-",
   }));
+}
+
+export async function updateInventoryAssetDetails(
+  supabase: SupabaseClient,
+  input: {
+    assetId: string;
+    name: string;
+    tag: string;
+    departmentId: string | null;
+  },
+) {
+  return supabase
+    .from("assets")
+    .update({
+      name: input.name.trim() || null,
+      code: input.tag.trim() || null,
+      department_id: input.departmentId,
+    })
+    .eq("id", input.assetId);
 }
 
 export async function loadInventoryWorkspace(supabase: SupabaseClient, activeLocationId: string | null): Promise<InventoryWorkspaceData> {

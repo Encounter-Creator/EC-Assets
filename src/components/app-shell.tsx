@@ -2,13 +2,16 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Bell, ChevronRight, ClipboardList, LayoutGrid, LogOut, MapPin, Menu, Package, Repeat, ScanLine, Settings, ShieldCheck, UserSquare2, X } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useLocationScope } from "@/contexts/location-scope-context";
 import { getPrimaryRoleLabel, type AppRole } from "@/lib/auth";
+import { dismissNotification as persistDismissNotification, loadNotificationFeed, loadNotifications, matchesNotificationTarget, saveNotifications, clearNotifications as persistClearNotifications, type AppNotification } from "@/lib/notifications";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -38,12 +41,160 @@ export function AppShell({
   kicker: string;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { profileName, roles, signOut } = useAuth();
-  const { locations, selectedLocationId, selectedLocationName, setSelectedLocationId } = useLocationScope();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const { damageLockCase, isDamageLocked, profileName, roles, signOut, user } = useAuth();
+  const { activeLocationId, locations, selectedLocationId, selectedLocationName, setSelectedLocationId } = useLocationScope();
   const visibleNavItems = navItems.filter((item) => item.show(roles));
   const mobilePrimaryNav = visibleNavItems.slice(0, 4);
   const roleLabel = getPrimaryRoleLabel(roles);
+  const visibleNotifications = useMemo(
+    () =>
+      notifications.map((item) =>
+        !item.read && matchesNotificationTarget(pathname, searchParams, item.href) ? { ...item, read: true } : item,
+      ),
+    [notifications, pathname, searchParams],
+  );
+  const unreadCount = useMemo(() => visibleNotifications.filter((item) => !item.read).length, [visibleNotifications]);
+
+  const mergeLoadedNotifications = useCallback((nextNotifications: AppNotification[]) => {
+    setNotifications((current) => {
+      const damageLockNotification =
+        isDamageLocked && damageLockCase
+          ? [
+              {
+                id: `damage-lock:${damageLockCase.id}`,
+                title: "Damage lock requires your statement",
+                body: `${damageLockCase.assetTag} is blocking normal workflows until you complete the damage form.`,
+                category: "damage" as const,
+                priority: "high" as const,
+                createdAt: damageLockCase.openedAt ?? new Date().toISOString(),
+                href: "/damage-lock",
+                read: false,
+              },
+            ]
+          : [];
+
+      const nextById = new Map([...nextNotifications, ...damageLockNotification].map((item) => [item.id, item]));
+      for (const item of current) {
+        if (nextById.has(item.id)) {
+          nextById.set(item.id, { ...nextById.get(item.id)!, read: item.read });
+        }
+      }
+      return [...nextById.values()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    });
+  }, [damageLockCase, isDamageLocked]);
+
+  const refreshNotificationFeed = useCallback(async () => {
+    if (!user) return;
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const nextNotifications = await loadNotificationFeed({
+      supabase,
+      userId: user.id,
+      roles,
+      activeLocationId,
+    });
+
+    mergeLoadedNotifications(nextNotifications);
+  }, [activeLocationId, mergeLoadedNotifications, roles, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const nextNotifications = loadNotifications(user.id, roles);
+    queueMicrotask(() => {
+      setNotifications(nextNotifications);
+    });
+  }, [roles, user]);
+
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      void refreshNotificationFeed().catch(() => {
+        if (!cancelled) {
+          // Keep the existing local notification state if the live refresh fails.
+        }
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshNotificationFeed]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    let refreshTimeout: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = () => {
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout);
+      }
+      refreshTimeout = setTimeout(() => {
+        void refreshNotificationFeed();
+      }, 250);
+    };
+
+    let channel: RealtimeChannel | null = supabase.channel(`assets-notifications:${user.id}:${activeLocationId ?? "all"}`);
+    for (const table of ["approvals", "requests", "return_requests", "damage_cases", "kit_deployments", "assets"]) {
+      channel = channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table },
+        scheduleRefresh,
+      );
+    }
+    channel.subscribe();
+
+    return () => {
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout);
+      }
+      if (channel) {
+        void supabase.removeChannel(channel);
+      }
+    };
+  }, [activeLocationId, refreshNotificationFeed, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    saveNotifications(user.id, visibleNotifications);
+  }, [user, visibleNotifications]);
+
+  const markNotificationRead = (notificationId: string) => {
+    setNotifications((current) =>
+      current.map((item) => (item.id === notificationId ? { ...item, read: true } : item)),
+    );
+  };
+
+  const dismissNotification = (notificationId: string) => {
+    setNotifications((current) => {
+      if (user) {
+        persistDismissNotification(user.id, notificationId, current);
+      }
+      return current.filter((item) => item.id !== notificationId);
+    });
+  };
+
+  const markAllNotificationsRead = () => {
+    setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+  };
+
+  const clearNotifications = () => {
+    setNotifications((current) => {
+      if (user) {
+        persistClearNotifications(user.id, current);
+      }
+      return [];
+    });
+  };
 
   return (
     <div className="app-mobile-shell relative flex min-h-screen text-foreground">
@@ -100,9 +251,115 @@ export function AppShell({
                 <MapPin size={14} className="opacity-80" />
                 <span>{selectedLocationName}</span>
               </div>
-              <button type="button" className="rounded-full border border-primary/18 bg-card/70 p-2 text-muted-foreground">
-                <Bell size={16} />
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setNotificationsOpen((current) => !current)}
+                  className="relative rounded-full border border-primary/18 bg-card/70 p-2 text-muted-foreground"
+                  aria-label="Open notifications"
+                >
+                  <Bell size={16} />
+                  {unreadCount > 0 && (
+                    <span className="absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full border border-primary/20 bg-primary px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary-foreground">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+                {notificationsOpen && (
+                  <div className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[22rem] max-w-[88vw] rounded-[1.4rem] border border-primary/16 bg-background/96 p-4 shadow-[var(--shadow-strong)] backdrop-blur-xl">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Notifications</div>
+                        <div className="mt-1 text-sm text-foreground">{unreadCount} unread</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setNotificationsOpen(false)}
+                        className="rounded-full border border-primary/12 p-2 text-muted-foreground"
+                        aria-label="Close notifications"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={markAllNotificationsRead}
+                        className="rounded-full border border-primary/18 px-3 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10"
+                      >
+                        Mark all read
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearNotifications}
+                        className="rounded-full border border-destructive/20 px-3 py-1 text-[11px] font-medium text-destructive transition-colors hover:bg-destructive/10"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {visibleNotifications.length === 0 ? (
+                        <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-8 text-center text-sm text-muted-foreground">
+                          No notifications saved.
+                        </div>
+                      ) : (
+                        visibleNotifications.map((notification) => (
+                          <div
+                            key={notification.id}
+                            className={cn(
+                              "block rounded-[1rem] border px-4 py-3 transition-colors",
+                              notification.read ? "border-primary/10 bg-card/35" : "border-primary/20 bg-primary/8",
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <Link
+                                href={notification.href ?? pathname}
+                                onClick={() => {
+                                  markNotificationRead(notification.id);
+                                  setNotificationsOpen(false);
+                                }}
+                                className="min-w-0 flex-1"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm font-medium text-foreground">{notification.title}</span>
+                                  <span className={cn(
+                                    "rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]",
+                                    notification.priority === "high"
+                                      ? "border-destructive/22 text-destructive"
+                                      : notification.priority === "medium"
+                                        ? "border-amber-500/22 text-amber-300"
+                                        : "border-primary/18 text-primary/80",
+                                  )}>
+                                    {notification.priority}
+                                  </span>
+                                </div>
+                                <div className="mt-2 text-sm text-muted-foreground">{notification.body}</div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-primary/72">
+                                  <span>{notification.category}</span>
+                                  <span>{new Date(notification.createdAt).toLocaleString()}</span>
+                                </div>
+                              </Link>
+                              <div className="flex shrink-0 items-start gap-2">
+                                {!notification.read && <span className="mt-1 size-2 rounded-full bg-primary" />}
+                                <button
+                                  type="button"
+                                  onClick={() => dismissNotification(notification.id)}
+                                  className="rounded-full border border-primary/12 p-1.5 text-muted-foreground transition-colors hover:bg-primary/8 hover:text-foreground"
+                                  aria-label={`Dismiss ${notification.title}`}
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="hidden items-center gap-2 rounded-full border border-primary/18 bg-card/70 px-4 py-2 md:inline-flex">
                 <span className="text-sm">{profileName || "Operator"}</span>
                 <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary/70">{roleLabel}</span>
