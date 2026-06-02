@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Bell, ChevronRight, ClipboardList, LayoutGrid, LogOut, MapPin, Menu, Package, Repeat, ScanLine, Settings, ShieldCheck, UserSquare2, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useLocationScope } from "@/contexts/location-scope-context";
@@ -47,6 +47,8 @@ export function AppShell({
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const { damageLockCase, isDamageLocked, profileName, roles, signOut, user } = useAuth();
   const { activeLocationId, locations, selectedLocationId, selectedLocationName, setSelectedLocationId } = useLocationScope();
+  const notificationRefreshInFlightRef = useRef(false);
+  const lastNotificationRefreshAtRef = useRef(0);
   const visibleNavItems = navItems.filter((item) => item.show(roles));
   const mobilePrimaryNav = visibleNavItems.slice(0, 4);
   const roleLabel = getPrimaryRoleLabel(roles);
@@ -87,20 +89,32 @@ export function AppShell({
     });
   }, [damageLockCase, isDamageLocked]);
 
-  const refreshNotificationFeed = useCallback(async () => {
+  const refreshNotificationFeed = useCallback(async (force = false) => {
     if (!user) return;
 
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
-    const nextNotifications = await loadNotificationFeed({
-      supabase,
-      userId: user.id,
-      roles,
-      activeLocationId,
-    });
+    const now = Date.now();
+    if (!force) {
+      if (notificationRefreshInFlightRef.current) return;
+      if (now - lastNotificationRefreshAtRef.current < 15000) return;
+    }
 
-    mergeLoadedNotifications(nextNotifications);
+    notificationRefreshInFlightRef.current = true;
+    lastNotificationRefreshAtRef.current = now;
+    try {
+      const nextNotifications = await loadNotificationFeed({
+        supabase,
+        userId: user.id,
+        roles,
+        activeLocationId,
+      });
+
+      mergeLoadedNotifications(nextNotifications);
+    } finally {
+      notificationRefreshInFlightRef.current = false;
+    }
   }, [activeLocationId, mergeLoadedNotifications, roles, user]);
 
   useEffect(() => {
@@ -115,7 +129,7 @@ export function AppShell({
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      void refreshNotificationFeed().catch(() => {
+      void refreshNotificationFeed(true).catch(() => {
         if (!cancelled) {
           // Keep the existing local notification state if the live refresh fails.
         }
@@ -140,7 +154,7 @@ export function AppShell({
       }
       refreshTimeout = setTimeout(() => {
         void refreshNotificationFeed();
-      }, 250);
+      }, 1500);
     };
 
     let channel: RealtimeChannel | null = supabase.channel(`assets-notifications:${user.id}:${activeLocationId ?? "all"}`);

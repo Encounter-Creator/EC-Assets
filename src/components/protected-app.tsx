@@ -19,6 +19,20 @@ export function ProtectedApp({ children }: { children: React.ReactNode }) {
     }
   }, [authStatus, isConfigured, loading, pathname, router]);
 
+  useEffect(() => {
+    if (loading || authStatus !== "signed_in") return;
+    if (accessState === "pending_approval") {
+      router.replace("/approval-pending");
+      return;
+    }
+    if (accessState === "damage_locked") {
+      router.replace("/damage-lock");
+      return;
+    }
+    if (canAccessRoute(pathname, roles)) return;
+    router.replace("/dashboard");
+  }, [accessState, authStatus, loading, pathname, roles, router]);
+
   if (!isConfigured) {
     return (
       <div className="relative isolate flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
@@ -41,12 +55,10 @@ export function ProtectedApp({ children }: { children: React.ReactNode }) {
   }
 
   if (accessState === "pending_approval") {
-    router.replace("/approval-pending");
     return null;
   }
 
   if (accessState === "damage_locked") {
-    router.replace("/damage-lock");
     return null;
   }
 
@@ -70,7 +82,6 @@ export function ProtectedApp({ children }: { children: React.ReactNode }) {
   }
 
   if (!canAccessRoute(pathname, roles)) {
-    router.replace("/dashboard");
     return null;
   }
 

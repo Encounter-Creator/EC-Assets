@@ -1,7 +1,7 @@
 "use client";
 
 import type { Session, User } from "@supabase/supabase-js";
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { resolveAccessContext, type AccessContextRow } from "@/lib/access-context";
 import type { AccessState, AppRole } from "@/lib/auth";
@@ -38,6 +38,17 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function isTransientAccessError(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("failed to fetch") ||
+    normalized.includes("networkerror") ||
+    normalized.includes("load failed") ||
+    normalized.includes("insufficient resources") ||
+    normalized.includes("fetch")
+  );
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const isConfigured = hasSupabaseEnv();
   const [session, setSession] = useState<Session | null>(null);
@@ -51,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [assetManagerLocationId, setAssetManagerLocationId] = useState<string | null>(null);
   const [assignedLocationId, setAssignedLocationId] = useState<string | null>(null);
   const [damageLockCase, setDamageLockCase] = useState<DamageLockCase | null>(null);
+  const lastResolvedUserIdRef = useRef<string | null>(null);
 
   const clearAccessState = useCallback(() => {
     setRoles([]);
@@ -74,10 +86,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const handleAccessError = useCallback((message: string) => {
+    if (isTransientAccessError(message) && (roles.length > 0 || accessState === "approved" || accessState === "pending_approval" || accessState === "damage_locked")) {
+      setAuthError(message);
+      return;
+    }
     clearAccessState();
     setAccessState("error");
     setAuthError(message);
-  }, [clearAccessState]);
+  }, [accessState, clearAccessState, roles.length]);
 
   const loadAccessContext = useCallback(async (userId: string) => {
     const supabase = getSupabaseBrowserClient();
@@ -92,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setDamageLockCase(resolved.damageLockCase);
     setAccessState(resolved.accessState);
     setAuthError(resolved.warning);
+    lastResolvedUserIdRef.current = userId;
   }, [applyAccessContext]);
 
   useEffect(() => {
@@ -122,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!mounted) return;
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
@@ -131,6 +148,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearAccessState();
         setAccessState("loading");
         setAuthError(null);
+        setLoading(false);
+        return;
+      }
+
+      const shouldReloadAccess =
+        event === "SIGNED_IN" ||
+        event === "USER_UPDATED" ||
+        lastResolvedUserIdRef.current !== nextSession.user.id ||
+        roles.length === 0 ||
+        accessState === "loading";
+
+      if (!shouldReloadAccess) {
         setLoading(false);
         return;
       }
@@ -146,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [clearAccessState, handleAccessError, isConfigured, loadAccessContext]);
+  }, [accessState, clearAccessState, handleAccessError, isConfigured, loadAccessContext, roles.length]);
 
   const retryAccessLoad = useCallback(async () => {
     if (!user) return;
