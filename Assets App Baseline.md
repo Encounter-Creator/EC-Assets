@@ -1493,8 +1493,29 @@ This checkpoint records the `Settings` rebuild pass completed after `Check-out/I
 - Build report export flows and duplicate-merge tooling.
 - Build config forms including live QR export tooling.
 
-### Recommended next step
-- Begin replacing page-level fallback data and scaffolds with live Supabase queries and actions, starting with the highest-priority workflow pages.
+## 36. Infrastructure Connection Checkpoint - 2026-06-02
+This checkpoint records the successful connection of the project to GitHub, Vercel, and Supabase.
+
+### GitHub Connection
+- **Repository:** `https://github.com/Encounter-Creator/EC-Assets.git`
+- **Status:** Connected and code pushed to `main` branch.
+- **Authentication:** Using Personal Access Token (PAT).
+
+### Vercel Connection
+- **Project Name:** `ec-assets`
+- **Link Status:** Linked and environment variables pulled to `.env.local`.
+- **Primary Deployment:** Vercel Web.
+
+### Supabase Connection
+- **Project Ref:** `kpcfvmteutmzcfoazszp`
+- **Project Name:** `EC Asset`
+- **CLI Status:** Linked via `npx supabase`.
+- **Database Status:** Migration history sync in progress (local migrations from 2026-06-01 onwards).
+
+### Next Steps
+- Finalize Supabase migration sync using `migration repair`.
+- Complete remaining workflow implementations (`Sunday Kits`, `Settings` CRUD).
+- Verify end-to-end live data flow on Vercel deployment.
 
 ## 31. Implementation Checkpoint - 2026-06-01
 This checkpoint records the first live workflow-data pass completed after the page scaffolding phase.
@@ -1789,6 +1810,301 @@ This snapshot records the current implementation state across the top-level web 
   - `Dashboard`
   - `Settings`
   - deeper workflow completion for `Special`, `Returns submit`, `Permanent`, `Stationed`, `Sunday Kits`, and `QR Scan`
+
+### Verification state at this snapshot
+- `npm run lint` passes
+- `npm run build` passes
+
+## 56. Implementation Checkpoint - 2026-06-02
+This checkpoint records the live `Settings > Kits` write-side pass completed after the second live `Settings` write-side pass.
+
+### Kits write-side progress
+- `Settings > Kits` is no longer read-only.
+- The first live write-side pass now supports:
+  - create saved kit definition
+  - retire / re-enable saved kit definition
+
+### Live actions added
+- Admins can now create a saved kit with:
+  - name
+  - home base
+  - item count
+- Admins can now change active state for existing kit definitions from the rebuilt settings route.
+
+### Backend contract added
+- Dedicated settings write RPC contracts are now tracked in the repo for:
+  - `create_settings_kit`
+  - `set_settings_kit_active`
+
+### Baseline alignment improved
+- The rebuilt settings route now better reflects the locked baseline rule that `Kits` is the saved-kit builder and lifecycle workspace.
+- The remaining gap is now item-membership editing depth, not absence of kit-definition lifecycle actions.
+
+### What is still intentionally deferred on Kits
+- Item-level kit membership editing is still deferred.
+- Rich edit flows beyond create and active-state lifecycle are still deferred.
+- Sunday-kit deployment still uses the saved definition list plus its separate deployment ledger rather than a full per-item kit builder surface.
+
+### Verification completed
+- `npm run lint` passed after the live `Settings > Kits` write-side pass.
+- `npm run build` passed after the live `Settings > Kits` write-side pass.
+
+## 57. Current Progress Snapshot - 2026-06-02
+This snapshot supersedes the earlier snapshot and records the current state after the live `Settings > Kits` write-side pass.
+
+### Current page status
+- `Inventory`
+  - grouped-catalog UI exists
+  - loads live inventory data with fallback handling
+  - selected unit detail surface now exists
+  - recent asset-history preview now exists
+- `My Assets`
+  - live assigned assets
+  - live pending recipient approvals
+  - live pending handovers
+  - live damage history where available
+- `Requests`
+  - live requestable assets
+  - live request history
+  - live asset-request submit
+  - live special-request submit
+  - live return-request submit
+- `Approvals`
+  - live approval queues where backend surface exists
+  - live damage-lock queues where backend surface exists
+  - live approval and damage resolution actions where confirmed
+- `Check-out/In`
+  - live `Standard` sign-out
+  - live `Standard` sign-in
+  - live `Permanent`
+  - live `Stationed`
+  - live `Sunday Kits` first-pass deploy/return ledger
+  - live `QR Scan` manual batch workflow
+  - live returns monitoring
+- `Dashboard`
+  - live role-aware top-card counts
+  - live role-aware lower feed cards
+  - fallback-aware mixed-data behavior
+- `Settings`
+  - live read-side section data where RPCs exist
+  - live `Profile` basic save
+  - live `Locations` add + active toggle
+  - live `Departments` add + active toggle
+  - live `Kits` create + active toggle
+  - live `Consumables` add + active toggle
+  - live `Config > qr_export` save
+  - `Users`, `Reports`, and `Duplicates` write-side still deferred
+
+### Remaining major implementation focus
+- `Settings > Users` admin / manager edit sets
+- `Settings > Reports` export flows
+- `Settings > Duplicates` merge tooling
+- broader config editing if required
+- deeper Sunday-kit item-level modeling if required
+- camera-based QR capture if required
+
+### Verification state at this snapshot
+- `npm run lint` passes
+- `npm run build` passes
+
+## 54. Implementation Checkpoint - 2026-06-02
+This checkpoint records the second live `Settings` write-side pass completed after the first live `Settings` write-side pass.
+
+### Settings write-side progress
+- `Settings` now has additional live write-side coverage for:
+  - `Consumables`
+  - `Config`
+
+### Live actions added
+- `Consumables` now supports:
+  - add consumable
+  - archive / re-enable consumable
+- `Config` now supports:
+  - live editing of the `qr_export` configuration block
+  - saving label size, page border, and paper format values
+
+### Backend contract added
+- Dedicated settings write RPC contracts are now tracked in the repo for:
+  - `create_settings_consumable`
+  - `set_settings_consumable_active`
+  - `save_settings_config`
+
+### UX/state behavior improved
+- The settings route now uses optimistic local updates for consumables and config rows so the interface remains responsive even when the read-side surface is partial.
+- The QR export editor now has a real form instead of static explanatory copy only.
+
+### Baseline alignment improved
+- The rebuilt `Settings` route now better reflects the locked baseline rule that:
+  - `Consumables` is an operational catalog plus stock-rule workspace
+  - `Config` is the home for QR export tooling
+- The remaining gap is now export generation depth and broader config breadth, not absence of any write path.
+
+### What is still intentionally deferred on Settings
+- `Users` split admin vs manager edit sets are still read-only.
+- `Kits` write-side builder actions are still deferred.
+- `Reports` export flows are still deferred.
+- `Duplicates` merge tooling is still deferred.
+- Broader non-QR config editing is still deferred.
+
+### Verification completed
+- `npm run lint` passed after the second live `Settings` write-side pass.
+- `npm run build` passed after the second live `Settings` write-side pass.
+
+## 55. Current Progress Snapshot - 2026-06-02
+This snapshot supersedes the earlier snapshot and records the current state after the second live `Settings` write-side pass.
+
+### Current page status
+- `Inventory`
+  - grouped-catalog UI exists
+  - loads live inventory data with fallback handling
+  - selected unit detail surface now exists
+  - recent asset-history preview now exists
+- `My Assets`
+  - live assigned assets
+  - live pending recipient approvals
+  - live pending handovers
+  - live damage history where available
+- `Requests`
+  - live requestable assets
+  - live request history
+  - live asset-request submit
+  - live special-request submit
+  - live return-request submit
+- `Approvals`
+  - live approval queues where backend surface exists
+  - live damage-lock queues where backend surface exists
+  - live approval and damage resolution actions where confirmed
+- `Check-out/In`
+  - live `Standard` sign-out
+  - live `Standard` sign-in
+  - live `Permanent`
+  - live `Stationed`
+  - live `Sunday Kits` first-pass deploy/return ledger
+  - live `QR Scan` manual batch workflow
+  - live returns monitoring
+- `Dashboard`
+  - live role-aware top-card counts
+  - live role-aware lower feed cards
+  - fallback-aware mixed-data behavior
+- `Settings`
+  - live read-side section data where RPCs exist
+  - live `Profile` basic save
+  - live `Locations` add + active toggle
+  - live `Departments` add + active toggle
+  - live `Consumables` add + active toggle
+  - live `Config > qr_export` save
+  - `Users`, `Kits`, `Reports`, and `Duplicates` write-side still deferred
+
+### Remaining major implementation focus
+- `Settings > Users` admin / manager edit sets
+- `Settings > Kits` write-side builder actions
+- `Settings > Reports` export flows
+- `Settings > Duplicates` merge tooling
+- broader config editing if required
+- deeper Sunday-kit item-level modeling if required
+- camera-based QR capture if required
+
+### Verification state at this snapshot
+- `npm run lint` passes
+- `npm run build` passes
+
+## 52. Implementation Checkpoint - 2026-06-02
+This checkpoint records the first live `Settings` write-side pass completed after the first live `Check-out/In > Sunday Kits` pass.
+
+### Settings write-side progress
+- `Settings` is no longer read-only across every section.
+- The first live write-side pass now covers:
+  - `Profile`
+  - `Locations`
+  - `Departments`
+
+### Live actions added
+- `Profile` now supports basic signed-in user name updates.
+- `Locations` now supports:
+  - add location
+  - enable / disable location
+- `Departments` now supports:
+  - add department
+  - enable / archive department
+
+### Backend contract added
+- Dedicated settings write RPC contracts are now tracked in the repo for:
+  - `create_settings_location`
+  - `set_settings_location_active`
+  - `create_settings_department`
+  - `set_settings_department_active`
+- Profile updates now write directly through the existing `profiles` table surface used elsewhere in the app.
+
+### Baseline alignment improved
+- The rebuilt `Settings` route now better reflects the locked baseline rule that:
+  - `Locations` is an admin-managed operational section
+  - `Departments` is an admin-managed operational section
+  - `Profile` is a real self-service settings area rather than read-only identity copy
+
+### What is still intentionally deferred on Settings
+- `Users` split admin vs manager edit sets are still read-only in this pass.
+- `Kits` write-side builder actions are still deferred.
+- `Consumables` write-side catalog / stock-rule actions are still deferred.
+- `Reports` export flows are still deferred.
+- `Duplicates` merge tooling is still deferred.
+- `Config` update forms and bulk QR export tooling are still deferred.
+
+### Verification completed
+- `npm run lint` passed after the first live `Settings` write-side pass.
+- `npm run build` passed after the first live `Settings` write-side pass.
+
+## 53. Current Progress Snapshot - 2026-06-02
+This snapshot supersedes the earlier snapshot and records the current state after the first live `Settings` write-side pass.
+
+### Current page status
+- `Inventory`
+  - grouped-catalog UI exists
+  - loads live inventory data with fallback handling
+  - selected unit detail surface now exists
+  - recent asset-history preview now exists
+- `My Assets`
+  - live assigned assets
+  - live pending recipient approvals
+  - live pending handovers
+  - live damage history where available
+- `Requests`
+  - live requestable assets
+  - live request history
+  - live asset-request submit
+  - live special-request submit
+  - live return-request submit
+- `Approvals`
+  - live approval queues where backend surface exists
+  - live damage-lock queues where backend surface exists
+  - live approval and damage resolution actions where confirmed
+- `Check-out/In`
+  - live `Standard` sign-out
+  - live `Standard` sign-in
+  - live `Permanent`
+  - live `Stationed`
+  - live `Sunday Kits` first-pass deploy/return ledger
+  - live `QR Scan` manual batch workflow
+  - live returns monitoring
+- `Dashboard`
+  - live role-aware top-card counts
+  - live role-aware lower feed cards
+  - fallback-aware mixed-data behavior
+- `Settings`
+  - live read-side section data where RPCs exist
+  - live `Profile` basic save
+  - live `Locations` add + active toggle
+  - live `Departments` add + active toggle
+  - other write-side sections still deferred
+
+### Remaining major implementation focus
+- `Settings > Users` admin / manager edit sets
+- `Settings > Kits` write-side builder actions
+- `Settings > Consumables` write-side catalog / stock-rule actions
+- `Settings > Reports` export flows
+- `Settings > Duplicates` merge tooling
+- `Settings > Config` update forms and QR export tooling
+- deeper Sunday-kit item-level modeling if required
+- camera-based QR capture if required
 
 ### Verification state at this snapshot
 - `npm run lint` passes
