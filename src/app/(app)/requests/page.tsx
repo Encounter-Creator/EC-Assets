@@ -861,9 +861,6 @@ export default function RequestsPage() {
                       {submittingAssetRequest ? "Submitting" : `Submit Asset Request${effectiveSelectedAssetIds.length > 0 ? ` (${effectiveSelectedAssetIds.length})` : ""}`}
                     </button>
 
-                    <div className="text-sm text-muted-foreground">
-                      Drafts autosave locally until you submit or discard them.
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1033,9 +1030,6 @@ export default function RequestsPage() {
                       {submittingReturnRequest ? "Submitting Return Request" : `Submit Return Request${effectiveSelectedReturnIds.length > 0 ? ` (${effectiveSelectedReturnIds.length})` : ""}`}
                     </button>
 
-                    <div className="text-sm text-muted-foreground">
-                      Drafts autosave locally until you submit or discard them.
-                    </div>
                   </div>
                 </div>
               </div>
