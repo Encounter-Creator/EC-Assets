@@ -1,72 +1,22 @@
 import { NextResponse } from "next/server";
 
-import type { AppRole } from "@/lib/auth";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { hasSupabaseAdminEnv } from "@/lib/supabase/config";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { generateTemporaryPassword, isAppRole, requireAdminContext } from "./helpers";
 
 export const dynamic = "force-dynamic";
 
-const allowedRoles: AppRole[] = ["admin", "main_admin"];
-
-function isAppRole(value: string): value is AppRole {
-  return ["admin", "main_admin", "asset_manager", "staff", "volunteer"].includes(value);
-}
-
-function generateTemporaryPassword() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*";
-  const values = crypto.getRandomValues(new Uint32Array(18));
-  return Array.from(values, (value) => alphabet[value % alphabet.length]).join("");
-}
-
 async function deleteCreatedUser(userId: string) {
-  const adminSupabase = getSupabaseAdminClient();
+  const context = await requireAdminContext();
+  const adminSupabase = "adminSupabase" in context ? context.adminSupabase : null;
   if (!adminSupabase) return;
   await adminSupabase.auth.admin.deleteUser(userId);
 }
 
 export async function POST(request: Request) {
-  const supabase = await getSupabaseServerClient();
-  if (!supabase) {
-    return NextResponse.json({ error: "Supabase is not configured for server auth." }, { status: 503 });
+  const context = await requireAdminContext();
+  if ("error" in context) {
+    return NextResponse.json({ error: context.error }, { status: context.status });
   }
-
-  const {
-    data: { user: currentUser },
-    error: currentUserError,
-  } = await supabase.auth.getUser();
-
-  if (currentUserError) {
-    return NextResponse.json({ error: currentUserError.message }, { status: 401 });
-  }
-
-  if (!currentUser) {
-    return NextResponse.json({ error: "You must be signed in." }, { status: 401 });
-  }
-
-  const { data: roleRows, error: roleError } = await supabase.from("user_roles").select("role").eq("user_id", currentUser.id);
-  if (roleError) {
-    return NextResponse.json({ error: roleError.message }, { status: 500 });
-  }
-
-  const currentRoles = ((roleRows ?? []) as Array<{ role: AppRole }>).map((row) => row.role);
-  if (!currentRoles.some((role) => allowedRoles.includes(role))) {
-    return NextResponse.json({ error: "Only admins can create users." }, { status: 403 });
-  }
-
-  if (!hasSupabaseAdminEnv()) {
-    return NextResponse.json(
-      {
-        error: "User creation needs `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` in the server environment.",
-      },
-      { status: 500 },
-    );
-  }
-
-  const adminSupabase = getSupabaseAdminClient();
-  if (!adminSupabase) {
-    return NextResponse.json({ error: "Supabase admin client could not be initialized." }, { status: 500 });
-  }
+  const { adminSupabase } = context;
 
   const body = (await request.json()) as {
     email?: string;
@@ -158,7 +108,7 @@ export async function POST(request: Request) {
       full_name: fullName || displayName,
       role: nextRole,
       home_base: locationName,
-      approved: false,
+      approved: true,
       locked: false,
       department: null,
     },

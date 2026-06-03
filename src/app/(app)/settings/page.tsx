@@ -85,6 +85,8 @@ export default function SettingsPage() {
   const [newUserLocationId, setNewUserLocationId] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
   const [createdUserPassword, setCreatedUserPassword] = useState<string | null>(null);
+  const [userPasswordDraft, setUserPasswordDraft] = useState("");
+  const [resetUserPassword, setResetUserPassword] = useState<string | null>(null);
   const [newLocationName, setNewLocationName] = useState("");
   const [newLocationIsHomeBase, setNewLocationIsHomeBase] = useState(true);
   const [newDepartmentName, setNewDepartmentName] = useState("");
@@ -740,6 +742,165 @@ export default function SettingsPage() {
       await refreshWorkspace();
     } catch (error) {
       const message = error instanceof Error ? error.message : "User creation failed.";
+      setFeedback({ tone: "error", message });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const approveUserAccess = async () => {
+    if (!isAdmin || !selectedUser) {
+      setFeedback({ tone: "error", message: "Only admins can approve users." });
+      return;
+    }
+
+    setBusyAction("user");
+    setResetUserPassword(null);
+
+    try {
+      const assignedLocationId = resolvedUserAssignedLocationId || null;
+      const nextRole = resolvedUserRole || "staff";
+      const assetManagerLocationId = nextRole === "asset_manager" ? assignedLocationId : null;
+      const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "approve",
+          role: nextRole,
+          displayName: resolvedUserDisplayName,
+          surname: resolvedUserSurname,
+          assignedLocationId,
+          assetManagerLocationId,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string; message?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "User approval failed.");
+      }
+
+      setFeedback({ tone: "success", message: payload.message ?? "User access approved." });
+      setUserDraftDirty(false);
+      await refreshWorkspace();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "User approval failed.";
+      setFeedback({ tone: "error", message });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const revokeUserAccess = async () => {
+    if (!isAdmin || !selectedUser) {
+      setFeedback({ tone: "error", message: "Only admins can revoke users." });
+      return;
+    }
+
+    setBusyAction("user");
+    setResetUserPassword(null);
+
+    try {
+      const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "revoke",
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string; message?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "User revoke failed.");
+      }
+
+      setFeedback({ tone: "success", message: payload.message ?? "User access revoked." });
+      await refreshWorkspace();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "User revoke failed.";
+      setFeedback({ tone: "error", message });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const updateUserPassword = async () => {
+    if (!isAdmin || !selectedUser) {
+      setFeedback({ tone: "error", message: "Only admins can reset passwords." });
+      return;
+    }
+
+    setBusyAction("user");
+    setResetUserPassword(null);
+
+    try {
+      const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "password",
+          password: userPasswordDraft,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string; message?: string; temporaryPassword?: string | null };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Password update failed.");
+      }
+
+      setResetUserPassword(payload.temporaryPassword ?? null);
+      setUserPasswordDraft("");
+      setFeedback({
+        tone: "success",
+        message: payload.temporaryPassword
+          ? `${payload.message ?? "Temporary password generated."} Temporary password: ${payload.temporaryPassword}`
+          : (payload.message ?? "Password updated."),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Password update failed.";
+      setFeedback({ tone: "error", message });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const deleteUserAccount = async () => {
+    if (!isAdmin || !selectedUser) {
+      setFeedback({ tone: "error", message: "Only admins can delete users." });
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete ${selectedUser.full_name}? This also removes the sign-in account.`);
+    if (!confirmed) return;
+
+    setBusyAction("user");
+    setResetUserPassword(null);
+
+    try {
+      const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
+        method: "DELETE",
+      });
+
+      const payload = (await response.json()) as { error?: string; message?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "User delete failed.");
+      }
+
+      setWorkspace((current) => ({
+        ...current,
+        users: current.users.filter((entry) => entry.id !== selectedUser.id),
+      }));
+      setSelectedUserId("");
+      setUserDraftDirty(false);
+      setFeedback({ tone: "success", message: payload.message ?? "User deleted." });
+      await refreshWorkspace();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "User delete failed.";
       setFeedback({ tone: "error", message });
     } finally {
       setBusyAction(null);
@@ -1611,14 +1772,79 @@ export default function SettingsPage() {
                             <FieldCard label="Lock state" value={selectedUser.locked ? "Locked" : "Unlocked"} />
                             <FieldCard label="Department" value={selectedUser.department ?? "No department"} />
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => void saveUser()}
-                            disabled={busyAction !== null}
-                            className="matrix-button inline-flex h-11 items-center justify-center rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {busyAction === "user" ? "Saving User" : "Save User"}
-                          </button>
+                          {createdUserPassword ? (
+                            <div className="rounded-[1rem] border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-100/85">
+                              Temporary password for the last created user: <span className="font-mono">{createdUserPassword}</span>
+                            </div>
+                          ) : null}
+                          {resetUserPassword ? (
+                            <div className="rounded-[1rem] border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-100/85">
+                              Temporary password for {selectedUser.full_name}: <span className="font-mono">{resetUserPassword}</span>
+                            </div>
+                          ) : null}
+                          {isAdmin ? (
+                            <div className="rounded-[1rem] border border-primary/12 bg-card/45 p-4">
+                              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                                <TextField
+                                  label="Temporary password"
+                                  value={userPasswordDraft}
+                                  onChange={setUserPasswordDraft}
+                                  placeholder="Leave blank to generate one"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => void updateUserPassword()}
+                                  disabled={busyAction !== null}
+                                  className="inline-flex h-11 self-end items-center justify-center rounded-[1rem] border border-primary/18 bg-card/55 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {busyAction === "user" ? "Working" : "Reset Password"}
+                                </button>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void saveUser()}
+                                  disabled={busyAction !== null}
+                                  className="matrix-button inline-flex h-11 items-center justify-center rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {busyAction === "user" ? "Saving User" : "Save User"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void approveUserAccess()}
+                                  disabled={busyAction !== null || !resolvedUserDisplayName.trim()}
+                                  className="inline-flex h-11 items-center justify-center rounded-[1rem] border border-emerald-500/25 bg-emerald-500/10 px-4 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/18 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {selectedUser.approved ? "Re-apply Access" : "Approve Access"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void revokeUserAccess()}
+                                  disabled={busyAction !== null || !selectedUser.approved}
+                                  className="inline-flex h-11 items-center justify-center rounded-[1rem] border border-amber-500/25 bg-amber-500/10 px-4 text-sm font-medium text-amber-100 transition-colors hover:bg-amber-500/18 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Revoke Access
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void deleteUserAccount()}
+                                  disabled={busyAction !== null || selectedUser.id === user?.id}
+                                  className="inline-flex h-11 items-center justify-center rounded-[1rem] border border-rose-500/25 bg-rose-500/10 px-4 text-sm font-medium text-rose-100 transition-colors hover:bg-rose-500/18 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Delete User
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void saveUser()}
+                              disabled={busyAction !== null}
+                              className="matrix-button inline-flex h-11 items-center justify-center rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {busyAction === "user" ? "Saving User" : "Save User"}
+                            </button>
+                          )}
                         </>
                       ) : (
                         <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-10 text-center text-sm text-muted-foreground">
