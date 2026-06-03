@@ -454,7 +454,7 @@ export default function ApprovalsPage() {
     <SectionShell title="Approvals" kicker="Queue + review panel">
       <div className="space-y-4 sm:space-y-6">
         <section className="app-panel p-5 sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="app-kicker">Approvals</div>
               <h1 className="app-title mt-2">Review approvals and damage locks.</h1>
@@ -591,7 +591,7 @@ export default function ApprovalsPage() {
             <div className="border-b border-primary/12 xl:border-b-0 xl:border-r">
               <div className="p-4 sm:p-5">
                 <div className="app-kicker">Queue list</div>
-                <div className="mt-2 text-sm text-muted-foreground">Rows now reflect live queues when the backend surface exists for the selected scope.</div>
+                <div className="mt-2 text-sm text-muted-foreground">Review the current queue and select items.</div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -797,7 +797,7 @@ export default function ApprovalsPage() {
                   )}
 
                   {activeTab === "recipient" && (
-                    <InlineNote icon={PackageCheck} text="Recipient supports bulk reminders only. Bulk approve/decline override does not belong in this queue." />
+                    <InlineNote icon={PackageCheck} text="Recipient queue supports reminders only." />
                   )}
                   {activeTab === "returns" && (
                     <InlineNote icon={RotateCcw} text="Accept Return remains the terminal action and auto-signs items back in using the approver-selected final sign-in location." />

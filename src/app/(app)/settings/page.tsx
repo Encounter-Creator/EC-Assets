@@ -1219,11 +1219,11 @@ export default function SettingsPage() {
     <SectionShell title="Settings" kicker="Profile + role-aware operational tabs">
       <div className="space-y-4 sm:space-y-6">
         <section className="app-panel p-5 sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="app-kicker">Settings</div>
               <h1 className="app-title mt-2">Manage profile, users, and operational setup.</h1>
-              <p className="app-subtitle mt-3">Manage profile, users, and core operational setup.</p>
+              <p className="app-subtitle mt-3">Profile and admin tools by role.</p>
             </div>
             <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Current profile</div>

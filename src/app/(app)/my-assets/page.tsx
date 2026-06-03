@@ -57,7 +57,7 @@ function isMyAssetsTab(value: string | null): value is "assigned" | "pending" | 
 }
 
 export default function MyAssetsPage() {
-  const { damageLockCase, isConfigured, isDamageLocked, isVolunteer, retryAccessLoad, user } = useAuth();
+  const { damageLockCase, isConfigured, isDamageLocked, retryAccessLoad, user } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -431,11 +431,11 @@ export default function MyAssetsPage() {
     <SectionShell title="My Assets" kicker="Assigned + Pending + Damage">
       <div className="space-y-4 sm:space-y-6">
         <section className="app-panel p-5 sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="app-kicker">My Assets</div>
               <h1 className="app-title mt-2">Manage your assigned items.</h1>
-              <p className="app-subtitle mt-3">Track assigned assets, pending actions, and damage tasks in one place.</p>
+              <p className="app-subtitle mt-3">Track assignments, pending actions, and damage tasks.</p>
             </div>
             <div className="grid grid-cols-3 gap-2 sm:min-w-[22rem]">
               <SummaryCard label="Assigned" value={summary.assigned} />
@@ -604,11 +604,6 @@ export default function MyAssetsPage() {
                   <EmptyState title="No assigned assets" body="Assigned assets will appear here once something has been issued to you." />
                 )}
 
-                <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 px-4 py-4 text-sm text-muted-foreground">
-                  {isVolunteer
-                    ? "Volunteer access stays tightly focused on assigned items, pending decisions, and return actions."
-                    : "Handover is intentionally integrated into `My Assets` in v2 instead of living on a dedicated top-level page."}
-                </div>
               </div>
             )}
 

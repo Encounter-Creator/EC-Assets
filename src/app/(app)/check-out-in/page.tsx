@@ -912,7 +912,7 @@ export default function CheckOutInPage() {
     <SectionShell title="Check-out/In" kicker="Standard + Permanent + Stationed + Kits">
       <div className="space-y-4 sm:space-y-6">
         <section className="app-panel p-5 sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="app-kicker">Check-out/In</div>
               <h1 className="app-title mt-2">Run check-out and check-in workflows.</h1>
@@ -1020,7 +1020,7 @@ export default function CheckOutInPage() {
 
                 {standardMode === "sign_out" ? (
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-                    <div className="space-y-4">
+                    <div className="space-y-4 rounded-[1.35rem] border border-primary/12 bg-card/20 p-4">
                       <WorkspaceCard
                         title="Asset-first sign out"
                         body="Select available assets and assign them to one recipient."
@@ -1034,7 +1034,7 @@ export default function CheckOutInPage() {
                       />
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-4 rounded-[1.35rem] border border-primary/12 bg-card/20 p-4">
                       <SelectionSummary
                         title="Selected sign-out batch"
                         items={selectedSignOutAssets}
@@ -1068,7 +1068,7 @@ export default function CheckOutInPage() {
                   </div>
                 ) : (
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-                    <div className="space-y-4">
+                    <div className="space-y-4 rounded-[1.35rem] border border-primary/12 bg-card/20 p-4">
                       <WorkspaceCard
                         title="Assigned-asset-first sign in"
                         body="Select returning assets and resolve the final outcome."
@@ -1082,7 +1082,7 @@ export default function CheckOutInPage() {
                       />
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-4 rounded-[1.35rem] border border-primary/12 bg-card/20 p-4">
                       <SelectionSummary
                         title="Selected sign-in batch"
                         items={selectedSignInAssets}

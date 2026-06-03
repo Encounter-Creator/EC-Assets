@@ -384,7 +384,7 @@ export default function InventoryPage() {
     <SectionShell title="Inventory" kicker="Grouped catalog">
       <div className="space-y-4 sm:space-y-6">
         <section className="app-panel p-5 sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="app-kicker">Inventory</div>
               <h1 className="app-title mt-2">Browse grouped assets.</h1>
