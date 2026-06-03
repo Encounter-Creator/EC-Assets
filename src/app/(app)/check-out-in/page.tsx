@@ -915,10 +915,8 @@ export default function CheckOutInPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="app-kicker">Check-out/In</div>
-              <h1 className="app-title mt-2">Operational workspace rebuilt around the live standard workflow.</h1>
-              <p className="app-subtitle mt-3">
-                `Standard`, `Permanent`, and `Stationed` now have dedicated live paths. `Returns` loads the real monitoring feed, while the remaining tabs keep the approved v2 structure until their workflow paths are connected.
-              </p>
+              <h1 className="app-title mt-2">Run check-out and check-in workflows.</h1>
+              <p className="app-subtitle mt-3">Move between standard, permanent, stationed, kit, return, and QR flows from one workspace.</p>
             </div>
             <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Workspace source</div>
@@ -1025,7 +1023,7 @@ export default function CheckOutInPage() {
                     <div className="space-y-4">
                       <WorkspaceCard
                         title="Asset-first sign out"
-                        body="Select available assets first, then assign them to one recipient in a single operation. This uses the live standard sign-out RPC and creates recipient approvals automatically."
+                        body="Select available assets and assign them to one recipient."
                       />
                       <AssetSelectionList
                         assets={workspace.signOutAssets}
@@ -1073,7 +1071,7 @@ export default function CheckOutInPage() {
                     <div className="space-y-4">
                       <WorkspaceCard
                         title="Assigned-asset-first sign in"
-                        body="Select assigned assets that are returning, then resolve them back into a final location as Available or Damaged. Damaged sign-ins follow the live damage-lock path."
+                        body="Select returning assets and resolve the final outcome."
                       />
                       <AssetSelectionList
                         assets={workspace.signInAssets}
@@ -1133,7 +1131,7 @@ export default function CheckOutInPage() {
               <div className="space-y-4">
                 <WorkspaceCard
                   title="Read-only returns monitoring surface"
-                  body="This tab now loads the live return-request monitor feed where available. Decision-making still belongs in Approvals > Returns, while direct intake still belongs in Standard > Sign In."
+                  body="Monitor return-request progress and current status."
                 />
                 <div className="grid gap-4 lg:grid-cols-3">
                   <MetricPanel label="Pending" value={String(returnSummary.pending)} />
@@ -1183,8 +1181,8 @@ export default function CheckOutInPage() {
                       title="Dedicated permanent-assignment workspace"
                       body={
                         permanentMode === "direct_issue"
-                          ? "Issue available assets directly into a permanent holder relationship without routing them through the standard recipient-approval path."
-                          : "Start from already assigned assets and move them to a different long-term holder with an explicit home-base target."
+                          ? "Issue available assets directly to a permanent holder."
+                          : "Move assigned assets to a different long-term holder."
                       }
                     />
                     <AssetSelectionList
@@ -1248,9 +1246,7 @@ export default function CheckOutInPage() {
                           ? `Run Permanent Issue${selectedPermanentIssueAssetIds.length > 0 ? ` (${selectedPermanentIssueAssetIds.length})` : ""}`
                           : `Run Permanent Reassignment${selectedPermanentReassignAssetIds.length > 0 ? ` (${selectedPermanentReassignAssetIds.length})` : ""}`}
                     </button>
-                    <div className="rounded-[1rem] border border-sky-500/18 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-                      Permanent moves now run from this tab. Standard remains the shared temporary assignment flow, while sign-in still resolves the asset back into a final location later if needed.
-                    </div>
+                    <div className="text-sm text-muted-foreground">Use Standard for temporary assignments and Sign In for final returns.</div>
                   </div>
                 </div>
               </div>
@@ -1287,8 +1283,8 @@ export default function CheckOutInPage() {
                       title="Site resting-state workspace"
                       body={
                         stationedMode === "temporary_use"
-                          ? "Select stationed assets and assign them to a responsible user for temporary use. This moves them into the traveling state."
-                          : "Bring traveling stationed assets back into a final site and resolve them as Stationed, Available, or Damaged."
+                          ? "Assign stationed assets to a responsible user for temporary use."
+                          : "Return traveling assets to a final site and resolve the outcome."
                       }
                     />
                     <AssetSelectionList
@@ -1668,7 +1664,7 @@ export default function CheckOutInPage() {
                   <div className="space-y-4">
                     <WorkspaceCard
                       title="Bulk QR in-tab operations"
-                      body="Capture QR codes with the device camera when supported, or paste/scan a manual batch into the same execution flow. Resolve the batch against live assets, then run one compatible operational action."
+                      body="Scan or import QR codes, resolve the batch, then run one action."
                     />
                     <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1746,9 +1742,7 @@ export default function CheckOutInPage() {
                       <QrCode size={15} />
                       {busy === "qr" ? "Resolving Batch" : "Resolve Batch"}
                     </button>
-                    <div className="rounded-[1rem] border border-sky-500/18 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-                      Camera capture, file import, and manual entry now feed the same live QR batch flow so operators can keep one operational batch at a time.
-                    </div>
+                    <div className="text-sm text-muted-foreground">Camera, file import, and manual entry all feed the same batch.</div>
                     {unresolvedQrInputs.length > 0 && (
                       <div className="rounded-[1rem] border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-100/85">
                         <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-amber-300">Unresolved scans</div>

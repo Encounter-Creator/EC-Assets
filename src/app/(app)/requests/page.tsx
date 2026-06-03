@@ -654,10 +654,8 @@ export default function RequestsPage() {
       <SectionShell title="Requests" kicker="Access restricted">
         <div className="app-panel p-5">
           <div className="app-kicker">Requests</div>
-          <h1 className="app-title mt-2">This role does not create request workflows from the general request workspace.</h1>
-          <p className="app-subtitle mt-3">
-            Volunteer-style access remains centered on `My Assets` and incoming decisions, which matches the baseline.
-          </p>
+          <h1 className="app-title mt-2">This role does not create requests here.</h1>
+          <p className="app-subtitle mt-3">Use `My Assets` for assigned items and personal actions.</p>
         </div>
       </SectionShell>
     );
@@ -670,10 +668,8 @@ export default function RequestsPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="app-kicker">Requests</div>
-              <h1 className="app-title mt-2">Guided request workspace rebuilt around the baseline basket model.</h1>
-              <p className="app-subtitle mt-3">
-                `Asset`, `Special`, and `Returns` now load live data and submit into real workflows where the backend surface exists, while still degrading cleanly when one or more request surfaces are missing.
-              </p>
+              <h1 className="app-title mt-2">Create and track requests.</h1>
+              <p className="app-subtitle mt-3">Build asset, special, and return requests from the current scope.</p>
             </div>
             <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Current basket</div>
@@ -745,7 +741,7 @@ export default function RequestsPage() {
                     <StepCard
                       step="Step 1"
                       title="Browse and build one shared asset basket"
-                      body="This pass now loads real requestable assets from the live inventory shape, filtered by the currently selected location scope when one is locked or selected."
+                      body="Select the items you want to request."
                     />
 
                     <div className="matrix-field flex h-12 items-center gap-2 rounded-[1.15rem] px-4">
@@ -809,7 +805,7 @@ export default function RequestsPage() {
                     <StepCard
                       step="Step 2"
                       title="Shared basket details and live submit"
-                      body="This tab now submits into the live grouped request-bundle workflow. The fields still follow the v2 structure even where the underlying RPC is simpler."
+                      body="Confirm source, timing, and request details."
                     />
 
                     <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
@@ -865,8 +861,8 @@ export default function RequestsPage() {
                       {submittingAssetRequest ? "Submitting" : `Submit Asset Request${effectiveSelectedAssetIds.length > 0 ? ` (${effectiveSelectedAssetIds.length})` : ""}`}
                     </button>
 
-                    <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3 text-sm text-primary/90">
-                      Asset requests now autosave locally per user and restore when you come back to this workflow. Submitting or discarding clears the saved draft.
+                    <div className="text-sm text-muted-foreground">
+                      Drafts autosave locally until you submit or discard them.
                     </div>
                   </div>
                 </div>
@@ -878,7 +874,7 @@ export default function RequestsPage() {
                 <StepCard
                   step="Step 1"
                   title="Choose special request type and target asset"
-                  body="Choose the workflow type, select the target asset, and submit into the live special-request flow where the compatible backend surface exists."
+                  body="Pick the workflow and target asset."
                 />
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
@@ -951,9 +947,7 @@ export default function RequestsPage() {
                       <ShieldCheck size={15} />
                       {submittingSpecialRequest ? "Submitting Special Request" : `Submit ${specialType}`}
                     </button>
-                    <div className="mt-3 rounded-[1rem] border border-sky-500/18 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-                      Submitted special requests continue through Approvals &gt; Special Requests, where managers/admins resolve stationed-use and permanent-reassignment decisions.
-                    </div>
+                    <div className="mt-3 text-sm text-muted-foreground">Managers and admins resolve submitted special requests in Approvals.</div>
                   </div>
                 </div>
               </div>
@@ -964,7 +958,7 @@ export default function RequestsPage() {
                 <StepCard
                   step="Step 1"
                   title="Build one shared return request"
-                  body="Assigned assets for return selection now load live from your current holdings, and the shared return-request submit path now creates the live workflow where the backend surface exists."
+                  body="Select assigned items and set the return details."
                 />
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
@@ -1039,8 +1033,8 @@ export default function RequestsPage() {
                       {submittingReturnRequest ? "Submitting Return Request" : `Submit Return Request${effectiveSelectedReturnIds.length > 0 ? ` (${effectiveSelectedReturnIds.length})` : ""}`}
                     </button>
 
-                    <div className="rounded-[1.2rem] border border-sky-500/18 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-                      Return requests now autosave locally per user and restore when you come back to this workflow. Approvals &gt; Returns remains the terminal acceptance surface where the approver confirms the receiving path.
+                    <div className="text-sm text-muted-foreground">
+                      Drafts autosave locally until you submit or discard them.
                     </div>
                   </div>
                 </div>
@@ -1085,9 +1079,6 @@ export default function RequestsPage() {
                         <div className="mt-3 rounded-[1rem] border border-primary/10 bg-card/40 px-4 py-3 text-sm text-muted-foreground">
                           {item.note}
                         </div>
-                      </div>
-                      <div className="rounded-[1rem] border border-primary/12 bg-card/35 px-4 py-3 text-sm text-muted-foreground">
-                        Drafts remain user-only and do not enter manager/admin queues until submitted.
                       </div>
                     </div>
                   </div>
@@ -1156,13 +1147,13 @@ function StepCard({
 }: {
   step: string;
   title: string;
-  body: string;
+  body?: string;
 }) {
   return (
     <div className="app-panel p-4">
       <div className="app-kicker">{step}</div>
       <div className="mt-2 font-display text-2xl text-foreground glow-soft">{title}</div>
-      <p className="mt-3 text-sm text-muted-foreground">{body}</p>
+      {body ? <p className="mt-3 text-sm text-muted-foreground">{body}</p> : null}
     </div>
   );
 }

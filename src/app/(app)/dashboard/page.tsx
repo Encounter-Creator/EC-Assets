@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { Activity, AlertTriangle, ArrowRight, BadgeCheck, Package, RefreshCcw, RotateCcw, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useLocationScope } from "@/contexts/location-scope-context";
@@ -30,6 +31,38 @@ const cardIcons: Record<string, React.ComponentType<{ size?: number; className?:
   "Damage Actions": AlertTriangle,
 };
 
+const dashboardCardLinks: Record<string, string> = {
+  Approvals: "/approvals",
+  "Damage Locks": "/approvals?tab=damage_locks",
+  Transfers: "/requests?tab=history",
+  "Blocked Workflows": "/approvals",
+  Returns: "/check-out-in?tab=returns",
+  "Sign-Outs": "/check-out-in?tab=standard&mode=sign_out",
+  "Damage Tasks": "/approvals?tab=damage_locks",
+  "Pending Approvals": "/my-assets?tab=pending",
+  "My Assigned Items": "/my-assets?tab=assigned",
+  "Return Requests": "/requests?tab=returns",
+  "Damage Actions": "/my-assets?tab=damage",
+};
+
+const dashboardFeedLinks: Record<string, string> = {
+  "Recent Asset Activity": "/inventory",
+  "Recent Requests": "/requests?tab=history",
+  "Recent Returns": "/check-out-in?tab=returns",
+  "Recent Damage Reports": "/approvals?tab=damage_locks",
+  "Location Snapshot": "/inventory",
+  "Open Requests Snapshot": "/requests",
+  "Returns in Progress": "/check-out-in?tab=returns",
+  "Damage Workflow Updates": "/approvals?tab=damage_locks",
+  "Location Inventory Snapshot": "/inventory",
+  "My Recent Requests": "/requests?tab=history",
+  "My Return Requests": "/requests?tab=returns",
+  "My Pending Items": "/my-assets?tab=pending",
+  "Home Base Inventory Highlights": "/inventory",
+  "My Assigned Assets": "/my-assets?tab=assigned",
+  "My Damage Actions": "/my-assets?tab=damage",
+};
+
 export default function DashboardPage() {
   const { isAdmin, isAssetManager, isVolunteer, isConfigured, user } = useAuth();
   const { activeLocationId, selectedLocationName } = useLocationScope();
@@ -38,24 +71,6 @@ export default function DashboardPage() {
   const [workspace, setWorkspace] = useState<DashboardWorkspaceData>(getFallbackDashboardWorkspace(role));
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
-
-  const rolePreviewRows = useMemo(
-    () => [
-      {
-        role: "Admin",
-        cards: ["Approvals", "Damage Locks", "Transfers", "Blocked Workflows"],
-      },
-      {
-        role: "Asset Manager",
-        cards: ["Approvals", "Returns", "Sign-Outs", "Damage Tasks"],
-      },
-      {
-        role: "Staff / Volunteer",
-        cards: ["Pending Approvals", "My Assigned Items", "Return Requests", "Damage Actions"],
-      },
-    ],
-    [],
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -139,10 +154,8 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="app-kicker">Action hub</div>
-              <h1 className="app-title mt-2 glow-soft">{roleTitle} dashboard now runs on live workflow surfaces.</h1>
-              <p className="app-subtitle mt-3">
-                The top action cards and lower feed cards now derive from the workflow pages already wired in this app, with location scope and fallback handling carried through into the dashboard.
-              </p>
+              <h1 className="app-title mt-2 glow-soft">{roleTitle} dashboard</h1>
+              <p className="app-subtitle mt-3">Jump straight into approvals, returns, inventory, and your current workflow queues.</p>
             </div>
             <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Dashboard source</div>
@@ -195,32 +208,13 @@ export default function DashboardPage() {
 
         <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           {workspace.topCards.map((card) => (
-            <TopCard key={card.label} card={card} />
-          ))}
-        </section>
-
-        <section className="grid gap-4 xl:grid-cols-3">
-          {rolePreviewRows.map((row) => (
-            <div key={row.role} className="app-panel p-5">
-              <div className="app-kicker">{row.role}</div>
-              <h2 className="mt-2 font-display text-2xl text-foreground glow-soft">Top cards</h2>
-              <div className="mt-4 space-y-2">
-                {row.cards.map((card) => (
-                  <div key={card} className="rounded-[1rem] border border-primary/12 bg-card/40 px-3 py-3">
-                    <div className="flex items-center justify-between gap-3 text-sm text-foreground">
-                      <span>{card}</span>
-                      <ArrowRight size={14} className="text-primary/70" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <TopCard key={card.label} card={card} href={dashboardCardLinks[card.label]} />
           ))}
         </section>
 
         <section className={cn("grid gap-4", workspace.lowerCards.length >= 5 ? "lg:grid-cols-2 xl:grid-cols-3" : "lg:grid-cols-2")}>
           {workspace.lowerCards.map((card) => (
-            <FeedCard key={card.title} card={card} />
+            <FeedCard key={card.title} card={card} href={dashboardFeedLinks[card.title]} />
           ))}
         </section>
       </div>
@@ -228,11 +222,10 @@ export default function DashboardPage() {
   );
 }
 
-function TopCard({ card }: { card: DashboardCard }) {
+function TopCard({ card, href }: { card: DashboardCard; href?: string }) {
   const Icon = cardIcons[card.label] ?? Package;
-
-  return (
-    <div className="matrix-dashboard-bubble p-4 sm:p-5">
+  const content = (
+    <>
       <div className="mb-5 flex items-center justify-between">
         <div className="flex size-11 items-center justify-center rounded-2xl border border-primary/24 bg-primary/10 text-primary">
           <Icon size={18} />
@@ -241,15 +234,24 @@ function TopCard({ card }: { card: DashboardCard }) {
       </div>
       <div className="font-display text-3xl text-foreground glow-soft">{card.value}</div>
       <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground sm:text-sm">{card.label}</div>
-    </div>
+    </>
   );
+
+  if (!href) {
+    return <div className="matrix-dashboard-bubble p-4 sm:p-5">{content}</div>;
+  }
+
+  return <Link href={href} className="matrix-dashboard-bubble block p-4 transition-transform hover:-translate-y-0.5 sm:p-5">{content}</Link>;
 }
 
-function FeedCard({ card }: { card: DashboardFeedCard }) {
-  return (
-    <div className="matrix-dashboard-bubble p-5">
+function FeedCard({ card, href }: { card: DashboardFeedCard; href?: string }) {
+  const content = (
+    <>
       <div className="app-kicker">Recent + Open + Snapshot</div>
-      <h2 className="mt-2 font-display text-xl text-foreground glow-soft">{card.title}</h2>
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <h2 className="font-display text-xl text-foreground glow-soft">{card.title}</h2>
+        {href ? <ArrowRight size={15} className="shrink-0 text-primary/70" /> : null}
+      </div>
       <div className="mt-4 space-y-2">
         {card.rows.length === 0 ? (
           <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-8 text-center text-sm text-muted-foreground">
@@ -266,6 +268,16 @@ function FeedCard({ card }: { card: DashboardFeedCard }) {
           ))
         )}
       </div>
-    </div>
+    </>
+  );
+
+  if (!href) {
+    return <div className="matrix-dashboard-bubble p-5">{content}</div>;
+  }
+
+  return (
+    <Link href={href} className="matrix-dashboard-bubble block p-5 transition-transform hover:-translate-y-0.5">
+      {content}
+    </Link>
   );
 }

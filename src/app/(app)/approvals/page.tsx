@@ -457,10 +457,8 @@ export default function ApprovalsPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="app-kicker">Approvals</div>
-              <h1 className="app-title mt-2">Queue list plus review panel rebuilt into the live shell.</h1>
-              <p className="app-subtitle mt-3">
-                This page now loads live approval and damage queues where the backend surface exists, keeps the locked v2 tab layout, and falls back cleanly only where the current schema still cannot support the final write path.
-              </p>
+              <h1 className="app-title mt-2">Review approvals and damage locks.</h1>
+              <p className="app-subtitle mt-3">Work through the active queues for the current scope.</p>
             </div>
             <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Queue source</div>

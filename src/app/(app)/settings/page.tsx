@@ -1222,10 +1222,8 @@ export default function SettingsPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="app-kicker">Settings</div>
-              <h1 className="app-title mt-2">Role-aware settings workspace now loads live read-side data.</h1>
-              <p className="app-subtitle mt-3">
-                `Profile` remains visible to all roles, while the operational/admin tabs now pull live section lists where the backend surface exists and fall back safely where it does not.
-              </p>
+              <h1 className="app-title mt-2">Manage profile, users, and operational setup.</h1>
+              <p className="app-subtitle mt-3">Manage profile, users, and core operational setup.</p>
             </div>
             <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Current profile</div>
@@ -1277,7 +1275,6 @@ export default function SettingsPage() {
             <div className="border-b border-primary/12 xl:border-b-0 xl:border-r">
               <div className="p-4 sm:p-5">
                 <div className="app-kicker">Tabs</div>
-                <div className="mt-2 text-sm text-muted-foreground">Visibility is role-aware. Profile stays visible for everyone.</div>
               </div>
 
               <div className="space-y-2 px-4 pb-4 sm:px-5 sm:pb-5">
@@ -1337,9 +1334,6 @@ export default function SettingsPage() {
                   >
                     {busyAction === "profile" ? "Saving Profile" : "Save Profile"}
                   </button>
-                  <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4 text-sm text-muted-foreground">
-                    This tab now uses live identity context where available and supports basic name updates. Notification preferences are still deferred.
-                  </div>
                 </div>
               )}
 
@@ -1349,8 +1343,8 @@ export default function SettingsPage() {
                     title="Users"
                     body={
                       isAdmin
-                        ? "Users uses one shared record structure with split admin versus manager edit sets. This pass supports core profile, home-base, and primary-role updates."
-                        : "Managers can now edit core operational profile fields for users in their own location from the rebuilt settings route."
+                        ? "Review and update user profile, home-base, and primary-role details."
+                        : "Review and update users for your assigned location."
                     }
                     rows={[]}
                   />
@@ -1493,7 +1487,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <DataSection
                     title="Roles"
-                    body="Roles remain fixed system roles in the current baseline, but this tab now summarizes live role distribution and the operational boundaries those roles map to."
+                    body="Review role distribution and access boundaries."
                     rows={[]}
                   />
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1531,7 +1525,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <DataSection
                     title="Locations"
-                    body="Locations remains the admin-managed home for add, disable, retire, and force-retirement handling. This first write-side pass supports add plus active/inactive state changes."
+                    body="Manage location records and active states."
                     rows={[]}
                   />
                   <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
@@ -1567,7 +1561,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <DataSection
                     title="Departments"
-                    body="Departments remains the admin-managed list for create, rename, merge, archive, and organization controls. This first write-side pass supports create plus active/inactive state changes."
+                    body="Manage department records and active states."
                     rows={[]}
                   />
                   <TextField label="New department" value={newDepartmentName} onChange={setNewDepartmentName} placeholder="Department name" />
@@ -1597,7 +1591,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <DataSection
                     title="Kits"
-                    body="Kits is now the saved-kit definition workspace for create, membership editing, and retire/re-enable lifecycle actions. Sunday Kits deployments can use these saved members as the source list when the membership schema is available."
+                    body="Create kits, manage members, and control kit status."
                     rows={[]}
                   />
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -1739,7 +1733,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <DataSection
                     title="Consumables"
-                    body="Consumables remains the operational catalog plus stock-rules workspace available to admins and managers. This write-side pass supports create plus active/inactive state changes."
+                    body="Manage consumables, stock, and active states."
                     rows={[]}
                   />
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -1775,7 +1769,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <DataSection
                     title="Reports"
-                    body="Reports is now a real filtered workspace for damage, asset-history, and accountability views. This pass adds live rows plus CSV export from the current filtered view."
+                    body="Filter report data and export the current view."
                     rows={[]}
                   />
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -1887,7 +1881,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <DataSection
                     title="Duplicates"
-                    body="Duplicates now includes a compare-and-resolve surface. This pass adds side-by-side review, survivor selection, and merge/not-duplicate resolution handling."
+                    body="Compare duplicate records and resolve them."
                     rows={[]}
                   />
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
@@ -1984,7 +1978,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <DataSection
                     title="Config"
-                    body="Config remains the business-rules plus technical/admin switch area and the home for bulk QR export tooling in the baseline. This pass adds a focused QR export editor."
+                    body="Manage operational rules and QR export settings."
                     rows={workspace.config.slice(0, 8).map((entry) => `${entry.key} | ${JSON.stringify(entry.value)}`)}
                   />
                   <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
@@ -2123,14 +2117,14 @@ function DataSection({
   rows,
 }: {
   title: string;
-  body: string;
+  body?: string;
   rows: string[];
 }) {
   return (
     <div className="space-y-4">
       <div className="app-kicker">{title}</div>
       <div className="font-display text-3xl text-foreground glow-soft">{title} workspace</div>
-      <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4 text-sm text-muted-foreground">{body}</div>
+      {body ? <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4 text-sm text-muted-foreground">{body}</div> : null}
       {rows.length > 0 && (
         <div className="space-y-2">
           {rows.map((row, index) => (

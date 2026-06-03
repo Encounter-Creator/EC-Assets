@@ -300,7 +300,7 @@ export default function InventoryPage() {
         <div className="app-panel p-5">
           <div className="app-kicker">Inventory</div>
           <h1 className="app-title mt-2">This role does not have general inventory access.</h1>
-          <p className="app-subtitle mt-3">Volunteers should only see assigned assets through `My Assets` in the new baseline.</p>
+          <p className="app-subtitle mt-3">Use `My Assets` for assigned items and personal actions.</p>
         </div>
       </SectionShell>
     );
@@ -387,10 +387,8 @@ export default function InventoryPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="app-kicker">Inventory</div>
-              <h1 className="app-title mt-2">Grouped catalog rebuilt into the new shell.</h1>
-              <p className="app-subtitle mt-3">
-                This first `Inventory` pass follows the baseline structure: grouped item catalog first, core filters at the top, and drill-in to physical units with status, location, and holder context.
-              </p>
+              <h1 className="app-title mt-2">Browse grouped assets.</h1>
+              <p className="app-subtitle mt-3">Filter by scope, department, and status, then drill into physical units.</p>
             </div>
             <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Inventory source</div>
@@ -525,9 +523,7 @@ export default function InventoryPage() {
                 {selectedGroup ? selectedGroup.name : "Select a grouped item"}
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
-                {selectedGroup
-                  ? "Physical units prioritize Tag, Name, Serial, Status, Current Location, and Holder."
-                  : "Choose a group from the left to inspect physical units."}
+                {selectedGroup ? "Select a physical unit to inspect details and actions." : "Choose a group to inspect physical units."}
               </div>
             </div>
 
@@ -619,7 +615,7 @@ export default function InventoryPage() {
                               ...departmentOptions.map((department) => ({ label: department.name, value: department.id })),
                             ]}
                           />
-                          <div className="text-sm text-muted-foreground">Serial number and main notes remain locked in the current pass.</div>
+                          <div className="text-sm text-muted-foreground">Serial number stays read-only.</div>
                           {saveFeedback && (
                             <div className={cn(
                               "rounded-[0.95rem] border px-3 py-3 text-sm",
@@ -642,8 +638,8 @@ export default function InventoryPage() {
                           <div>Name</div>
                           <div>Tag</div>
                           <div>Department / Team</div>
-                          <div>Serial number and main notes remain locked in the current pass.</div>
-                          <div className="pt-2 text-primary/80">This role can view these editable fields, but only admin and asset-manager roles can save changes.</div>
+                          <div>Serial number stays read-only.</div>
+                          <div className="pt-2 text-primary/80">Only admin and asset-manager roles can save changes.</div>
                         </div>
                       )}
                     </div>
@@ -676,9 +672,7 @@ export default function InventoryPage() {
                           </button>
                         ))}
                       </div>
-                      <div className="mt-3 text-sm text-muted-foreground">
-                        Asset detail now links directly into the compatible request, operational, and review workflow for this unit.
-                      </div>
+                      <div className="mt-3 text-sm text-muted-foreground">Open the next compatible workflow for this unit.</div>
                     </div>
 
                     <div className="rounded-[1rem] border border-primary/12 bg-card/35 p-4">

@@ -434,10 +434,8 @@ export default function MyAssetsPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="app-kicker">My Assets</div>
-              <h1 className="app-title mt-2">Action-oriented personal asset workspace rebuilt into the new shell.</h1>
-              <p className="app-subtitle mt-3">
-                This page now loads real assigned assets, pending recipient approvals, pending handovers, and active damage-lock state where the live schema supports them.
-              </p>
+              <h1 className="app-title mt-2">Manage your assigned items.</h1>
+              <p className="app-subtitle mt-3">Track assigned assets, pending actions, and damage tasks in one place.</p>
             </div>
             <div className="grid grid-cols-3 gap-2 sm:min-w-[22rem]">
               <SummaryCard label="Assigned" value={summary.assigned} />
@@ -770,9 +768,7 @@ export default function MyAssetsPage() {
                           <ShieldAlert size={15} />
                           {isDamageLocked ? "Open Damage Form" : "Open Damage Workflow"}
                         </button>
-                        <div className="rounded-[1rem] border border-primary/12 bg-card/45 px-4 py-3 text-sm text-muted-foreground">
-                          Your historical incidents stay below. The active case always routes through the dedicated lock flow.
-                        </div>
+                        <div className="text-sm text-muted-foreground">Historical incidents stay below.</div>
                       </div>
                     </div>
                   </div>
@@ -782,9 +778,7 @@ export default function MyAssetsPage() {
                   <div className="app-panel p-4 sm:p-5">
                     <div className="app-kicker">Damage report</div>
                     <div className="mt-2 font-display text-2xl text-foreground glow-soft">Start a new incident from My Assets</div>
-                    <div className="mt-3 text-sm text-muted-foreground">
-                      This tab now supports first-pass damage authoring. Submit the affected asset, incident type, and statement here so the case enters the review queue.
-                    </div>
+                    <div className="mt-3 text-sm text-muted-foreground">Submit the affected asset, incident type, and statement.</div>
 
                     <div className="mt-4 grid gap-3 lg:grid-cols-2">
                       <label className="space-y-2">
@@ -848,9 +842,7 @@ export default function MyAssetsPage() {
                         <ShieldAlert size={15} />
                         {submittingDamage ? "Submitting Damage" : "Submit Damage Report"}
                       </button>
-                      <div className="rounded-[1rem] border border-primary/12 bg-card/45 px-4 py-3 text-sm text-muted-foreground">
-                        If the newer damage-case surface exists, this will open the full damage-lock workflow automatically after refresh.
-                      </div>
+                      <div className="text-sm text-muted-foreground">The damage-lock workflow opens automatically when required.</div>
                     </div>
                   </div>
                 )}
@@ -881,12 +873,10 @@ export default function MyAssetsPage() {
                 ))}
 
                 {workspace.damageRecords.length === 0 && (
-                  <EmptyState title="No damage history" body="Damage incidents assigned to you will appear here after they move out of the initial form stage." />
+                  <EmptyState title="No damage history" body="Resolved or reviewed incidents will appear here." />
                 )}
 
-                <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 px-4 py-4 text-sm text-muted-foreground">
-                  Damage history stays here. If a new incident locks your account, this tab surfaces the active case and sends you into the dedicated damage form flow.
-                </div>
+                <div className="text-sm text-muted-foreground">Active damage locks route through the dedicated form flow.</div>
               </div>
             )}
           </div>

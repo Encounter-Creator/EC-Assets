@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Bell, ChevronRight, ClipboardList, LayoutGrid, LogOut, MapPin, Menu, Package, Repeat, ScanLine, Settings, ShieldCheck, UserSquare2, X } from "lucide-react";
+import { Bell, ChevronRight, ClipboardList, LayoutGrid, LogOut, MapPin, Menu, Package, ScanLine, Settings, ShieldCheck, UserSquare2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
@@ -236,7 +236,7 @@ export function AppShell({
                 <X size={18} />
               </button>
             </div>
-            <Sidebar pathname={pathname} navItems={visibleNavItems} mobile onNavigate={() => setMobileOpen(false)} />
+            <Sidebar pathname={pathname} navItems={visibleNavItems} onNavigate={() => setMobileOpen(false)} />
           </aside>
         </>
       )}
@@ -441,12 +441,10 @@ export function AppShell({
 function Sidebar({
   pathname,
   navItems,
-  mobile = false,
   onNavigate,
 }: {
   pathname: string;
   navItems: NavItem[];
-  mobile?: boolean;
   onNavigate?: () => void;
 }) {
   const { signOut } = useAuth();
@@ -478,18 +476,6 @@ function Sidebar({
           );
         })}
       </nav>
-      {!mobile && (
-        <div className="px-3 pb-3">
-          <div className="rounded-[1.2rem] border border-primary/18 bg-background/50 px-4 py-3">
-            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Scope</div>
-            <div className="mt-2 text-sm text-foreground">All locations</div>
-            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-              <Repeat size={12} />
-              Baseline rebuild shell
-            </div>
-          </div>
-        </div>
-      )}
       <div className="px-3 pb-3">
         <div className="rounded-[1.2rem] border border-primary/18 bg-background/50 px-4 py-3">
           <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Location scope</div>
