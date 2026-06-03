@@ -78,6 +78,13 @@ export default function SettingsPage() {
   const [userSearch, setUserSearch] = useState("");
   const [userRoleFilter, setUserRoleFilter] = useState("all");
   const [userAccessFilter, setUserAccessFilter] = useState("all");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserDisplayName, setNewUserDisplayName] = useState("");
+  const [newUserSurname, setNewUserSurname] = useState("");
+  const [newUserRole, setNewUserRole] = useState("staff");
+  const [newUserLocationId, setNewUserLocationId] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [createdUserPassword, setCreatedUserPassword] = useState<string | null>(null);
   const [newLocationName, setNewLocationName] = useState("");
   const [newLocationIsHomeBase, setNewLocationIsHomeBase] = useState(true);
   const [newDepartmentName, setNewDepartmentName] = useState("");
@@ -646,6 +653,93 @@ export default function SettingsPage() {
       await refreshWorkspace();
     } catch (error) {
       const message = error instanceof Error ? error.message : "User update failed.";
+      setFeedback({ tone: "error", message });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const createUserAccount = async () => {
+    if (!isAdmin) {
+      setFeedback({ tone: "error", message: "Only admins can create users." });
+      return;
+    }
+
+    if (!newUserEmail.trim()) {
+      setFeedback({ tone: "error", message: "Enter an email address first." });
+      return;
+    }
+
+    if (!newUserDisplayName.trim()) {
+      setFeedback({ tone: "error", message: "Enter a first name first." });
+      return;
+    }
+
+    setBusyAction("user");
+    setCreatedUserPassword(null);
+
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: newUserEmail,
+          displayName: newUserDisplayName,
+          surname: newUserSurname,
+          role: newUserRole,
+          locationId: newUserLocationId || null,
+          password: newUserPassword,
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        message?: string;
+        temporaryPassword?: string | null;
+        user?: {
+          id: string;
+          email: string;
+          full_name: string;
+          role: string;
+          home_base: string | null;
+          approved: boolean;
+          locked: boolean;
+          department: string | null;
+        };
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "User creation failed.");
+      }
+
+      const createdUser = payload.user;
+      if (createdUser) {
+        setWorkspace((current) => ({
+          ...current,
+          users: [...current.users, createdUser].sort((a, b) => a.full_name.localeCompare(b.full_name)),
+        }));
+        setSelectedUserId(createdUser.id);
+      }
+
+      setNewUserEmail("");
+      setNewUserDisplayName("");
+      setNewUserSurname("");
+      setNewUserRole("staff");
+      setNewUserLocationId("");
+      setNewUserPassword("");
+      setUserDraftDirty(false);
+      setCreatedUserPassword(payload.temporaryPassword ?? null);
+      setFeedback({
+        tone: "success",
+        message: payload.temporaryPassword
+          ? `${payload.message ?? "User created."} Temporary password: ${payload.temporaryPassword}`
+          : (payload.message ?? "User created."),
+      });
+      await refreshWorkspace();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "User creation failed.";
       setFeedback({ tone: "error", message });
     } finally {
       setBusyAction(null);
@@ -1348,6 +1442,58 @@ export default function SettingsPage() {
                     }
                     rows={[]}
                   />
+                  {isAdmin && (
+                    <div className="rounded-[1.2rem] border border-primary/12 bg-card/35 p-4">
+                      <div className="app-kicker">Create user</div>
+                      <div className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        <TextField label="Email" value={newUserEmail} onChange={setNewUserEmail} placeholder="name@example.com" />
+                        <TextField label="First name" value={newUserDisplayName} onChange={setNewUserDisplayName} placeholder="First name" />
+                        <TextField label="Surname" value={newUserSurname} onChange={setNewUserSurname} placeholder="Surname" />
+                        <SelectTextField
+                          label="Primary role"
+                          value={newUserRole}
+                          onChange={setNewUserRole}
+                          options={[
+                            { label: "Admin", value: "admin" },
+                            { label: "Asset Manager", value: "asset_manager" },
+                            { label: "Staff", value: "staff" },
+                            { label: "Volunteer", value: "volunteer" },
+                          ]}
+                        />
+                        <SelectTextField
+                          label="Home base"
+                          value={newUserLocationId}
+                          onChange={setNewUserLocationId}
+                          options={[
+                            { label: "No home base", value: "" },
+                            ...workspace.locations.map((location) => ({ label: location.name, value: location.id })),
+                          ]}
+                        />
+                        <TextField
+                          label="Temporary password"
+                          value={newUserPassword}
+                          onChange={setNewUserPassword}
+                          placeholder="Leave blank to auto-generate"
+                        />
+                      </div>
+                      <div className="mt-3 text-sm text-muted-foreground">
+                        Leave the password blank to generate a one-time temporary password.
+                      </div>
+                      {createdUserPassword ? (
+                        <div className="mt-3 rounded-[1rem] border border-primary/18 bg-primary/8 px-4 py-3 text-sm text-primary">
+                          Generated password: {createdUserPassword}
+                        </div>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => void createUserAccount()}
+                        disabled={busyAction !== null}
+                        className="matrix-button mt-4 inline-flex h-11 items-center justify-center rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {busyAction === "user" ? "Creating User" : "Create User"}
+                      </button>
+                    </div>
+                  )}
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <FieldCard label="Visible users" value={String(filteredUsers.length)} />
                     <FieldCard label="Approved" value={String(visibleUsers.filter((entry) => entry.approved).length)} />
