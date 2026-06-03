@@ -119,6 +119,7 @@ export default function RequestsPage() {
   const { activeLocationId, selectedLocationName, locations } = useLocationScope();
   const activeTab: "asset" | "special" | "returns" | "history" =
     requestedTab === "returns" ? "returns" : requestedTab === "special" ? "special" : requestedTab === "history" ? "history" : "asset";
+  const scopedActiveLocationId = activeLocationId === "unassigned" ? null : activeLocationId;
   const [workspace, setWorkspace] = useState<RequestsWorkspaceData>(fallbackWorkspace);
   const [loading, setLoading] = useState(true);
   const [assetSearch, setAssetSearch] = useState("");
@@ -175,7 +176,7 @@ export default function RequestsPage() {
 
     setLoading(true);
     try {
-      const nextWorkspace = await loadRequestsWorkspace(supabase, user.id, activeLocationId);
+      const nextWorkspace = await loadRequestsWorkspace(supabase, user.id, scopedActiveLocationId);
       setWorkspace(nextWorkspace);
     } catch (error) {
       const message = error instanceof Error ? error.message : "We could not load Requests right now.";
@@ -214,7 +215,7 @@ export default function RequestsPage() {
       }
 
       try {
-        const nextWorkspace = await loadRequestsWorkspace(supabase, user.id, activeLocationId);
+        const nextWorkspace = await loadRequestsWorkspace(supabase, user.id, scopedActiveLocationId);
         if (!cancelled) {
           setWorkspace(nextWorkspace);
         }
@@ -238,7 +239,7 @@ export default function RequestsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeLocationId, isConfigured, user]);
+  }, [isConfigured, scopedActiveLocationId, user]);
 
   const effectiveSelectedAssetIds = useMemo(() => {
     const nextIds = new Set(selectedAssetIds);
@@ -247,7 +248,7 @@ export default function RequestsPage() {
     }
     return [...nextIds];
   }, [requestedAssetId, requestedTab, selectedAssetIds, workspace.requestableAssets]);
-  const resolvedRequestSourceLocationId = activeLocationId ?? requestSourceLocationId;
+  const resolvedRequestSourceLocationId = scopedActiveLocationId ?? requestSourceLocationId;
   const resolvedRequestSourceLocationName = useMemo(() => {
     if (!resolvedRequestSourceLocationId) return null;
     return locations.find((location) => location.id === resolvedRequestSourceLocationId)?.name ?? null;
@@ -826,7 +827,7 @@ export default function RequestsPage() {
                       </div>
                     </div>
 
-                    {!activeLocationId && (
+                    {!scopedActiveLocationId && (
                       <SelectCard
                         label="Source location"
                         value={resolvedRequestSourceLocationId}
@@ -907,7 +908,7 @@ export default function RequestsPage() {
                   <div className="app-panel p-4">
                     <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Dynamic form preview</div>
                     <div className="mt-3 font-display text-2xl text-foreground glow-soft">{specialType}</div>
-                    {!activeLocationId && (
+                    {!scopedActiveLocationId && (
                       <div className="mt-3">
                         <SelectCard
                           label="Source location"
@@ -993,7 +994,7 @@ export default function RequestsPage() {
                       <div className="mt-3 text-sm text-foreground">{selectedReturnAssets.length} asset item{selectedReturnAssets.length === 1 ? "" : "s"} selected</div>
                     </div>
 
-                    {!activeLocationId && (
+                    {!scopedActiveLocationId && (
                       <SelectCard
                         label="Source location"
                         value={resolvedRequestSourceLocationId}

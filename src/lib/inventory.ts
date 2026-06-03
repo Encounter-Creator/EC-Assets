@@ -71,6 +71,14 @@ export const fallbackInventoryHistory: InventoryHistoryRecord[] = [
   { id: "h3", action: "sign_in", note: "Standard sign-in to Centurion", performedBy: "Sarah Ops", createdAt: "2026-05-28 18:14" },
 ];
 
+function isLocationScopeUnavailable(locationId: string | null) {
+  return locationId === "unassigned";
+}
+
+function looksLikeUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function isMissingSchemaError(message: string) {
   const normalized = message.toLowerCase();
   return (
@@ -112,6 +120,10 @@ async function loadReferenceMaps(supabase: SupabaseClient, locationIds: string[]
 }
 
 async function loadInventoryAssets(supabase: SupabaseClient, activeLocationId: string | null) {
+  if (isLocationScopeUnavailable(activeLocationId)) {
+    return [];
+  }
+
   const query = supabase
     .from("assets")
     .select("id, code, name, serial_number, status, current_location_id, department_id, current_holder")
@@ -178,6 +190,10 @@ export async function loadInventoryWorkspace(supabase: SupabaseClient, activeLoc
 }
 
 export async function loadInventoryAssetHistory(supabase: SupabaseClient, assetId: string): Promise<InventoryHistoryRecord[]> {
+  if (!looksLikeUuid(assetId)) {
+    return fallbackInventoryHistory;
+  }
+
   try {
     const { data, error } = await supabase
       .from("asset_history")

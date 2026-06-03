@@ -162,6 +162,10 @@ async function loadReferenceMaps(supabase: SupabaseClient, locationIds: string[]
 }
 
 async function loadRequestableAssets(supabase: SupabaseClient, activeLocationId: string | null) {
+  if (activeLocationId === "unassigned") {
+    return [];
+  }
+
   const query = supabase
     .from("assets")
     .select("id, code, name, serial_number, status, current_location_id, department_id")
