@@ -241,7 +241,7 @@ function TopCard({ card, href }: { card: DashboardCard; href?: string }) {
     return <div className="matrix-dashboard-bubble p-4 sm:p-5">{content}</div>;
   }
 
-  return <Link href={href} className="matrix-dashboard-bubble block p-4 transition-transform hover:-translate-y-0.5 sm:p-5">{content}</Link>;
+  return <Link href={href} prefetch={false} className="matrix-dashboard-bubble block p-4 transition-transform hover:-translate-y-0.5 sm:p-5">{content}</Link>;
 }
 
 function FeedCard({ card, href }: { card: DashboardFeedCard; href?: string }) {
@@ -276,7 +276,7 @@ function FeedCard({ card, href }: { card: DashboardFeedCard; href?: string }) {
   }
 
   return (
-    <Link href={href} className="matrix-dashboard-bubble block p-5 transition-transform hover:-translate-y-0.5">
+    <Link href={href} prefetch={false} className="matrix-dashboard-bubble block p-5 transition-transform hover:-translate-y-0.5">
       {content}
     </Link>
   );

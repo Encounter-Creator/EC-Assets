@@ -330,6 +330,7 @@ export function AppShell({
                             <div className="flex items-start justify-between gap-3">
                               <Link
                                 href={notification.href ?? pathname}
+                                prefetch={false}
                                 onClick={() => {
                                   markNotificationRead(notification.id);
                                   setNotificationsOpen(false);
@@ -402,6 +403,7 @@ export function AppShell({
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   className={cn(
                     "flex min-h-[4rem] flex-col items-center justify-center gap-1 rounded-xl px-1 pb-1.5 pt-2 text-[10px] font-semibold transition-colors",
                     active ? "bg-primary/14 text-primary" : "text-muted-foreground hover:bg-primary/8 hover:text-foreground",
@@ -462,6 +464,7 @@ function Sidebar({
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               onClick={onNavigate}
               className={cn(
                 "group flex items-center gap-3 rounded-[1.2rem] border px-4 py-3 text-sm font-medium transition-colors",
