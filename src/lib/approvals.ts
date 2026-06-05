@@ -509,11 +509,10 @@ export async function loadApprovalsWorkspace(supabase: SupabaseClient, activeLoc
   }
 
   const successCount = [approvalResult, damageResult].filter((result) => result.status === "fulfilled").length;
-  const hasAnyLiveRows = (Object.values(queues).flat().length > 0);
-  if (successCount === 0 || !hasAnyLiveRows) {
+  if (successCount === 0) {
     return {
       ...fallbackApprovalsWorkspace,
-      source: successCount === 0 ? "fallback" : "mixed",
+      source: "fallback",
       locations,
       warnings: [...fallbackApprovalsWorkspace.warnings, ...warnings],
     };
