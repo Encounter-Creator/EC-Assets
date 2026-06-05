@@ -176,9 +176,11 @@ export default function DashboardPage() {
               <RefreshCcw size={14} className={cn(loading && "animate-spin")} />
               {loading ? "Refreshing" : "Refresh"}
             </button>
-            <span className="rounded-full border border-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-              Scope: {selectedLocationName}
-            </span>
+            {selectedLocationName !== "All locations" ? (
+              <span className="rounded-full border border-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                Scope: {selectedLocationName}
+              </span>
+            ) : null}
           </div>
 
           {feedback && (

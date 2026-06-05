@@ -38,10 +38,12 @@ import { generateQrExportPdf, loadQrExportAssets, type QrExportAsset } from "@/l
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
+import { AssetIntakePanel } from "./asset-intake-panel";
 import { SectionShell } from "../layout";
 
 type SettingsTab =
   | "profile"
+  | "asset_intake"
   | "users"
   | "roles"
   | "locations"
@@ -54,6 +56,7 @@ type SettingsTab =
 
 const tabs = [
   { id: "profile", label: "Profile", icon: UserRound, show: () => true },
+  { id: "asset_intake", label: "Asset Intake", icon: Package, show: (isAdmin: boolean) => isAdmin },
   { id: "users", label: "Users", icon: Users, show: (isAdmin: boolean, isAssetManager: boolean) => isAdmin || isAssetManager },
   { id: "roles", label: "Roles", icon: Shield, show: (isAdmin: boolean) => isAdmin },
   { id: "locations", label: "Locations", icon: MapPin, show: (isAdmin: boolean) => isAdmin },
@@ -1590,6 +1593,16 @@ export default function SettingsPage() {
                     {busyAction === "profile" ? "Saving Profile" : "Save Profile"}
                   </button>
                 </div>
+              )}
+
+              {activeTab === "asset_intake" && (
+                <AssetIntakePanel
+                  isAdmin={isAdmin}
+                  userId={user?.id ?? null}
+                  workspace={workspace}
+                  onRefresh={refreshWorkspace}
+                  onFeedback={setFeedback}
+                />
               )}
 
               {activeTab === "users" && (
