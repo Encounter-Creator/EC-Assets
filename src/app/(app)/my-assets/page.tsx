@@ -433,21 +433,20 @@ export default function MyAssetsPage() {
   return (
     <SectionShell title="My Assets" kicker="Assigned + Pending + Damage">
       <div className="space-y-4 sm:space-y-6">
-        <section className="app-panel p-5 sm:p-6">
+        <section className="space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="app-kicker">My Assets</div>
-              <h1 className="app-title mt-2">Manage your assigned items.</h1>
-              <p className="app-subtitle mt-3">Track assignments, pending actions, and damage tasks.</p>
+              <h1 className="page-title mt-2">My Assets</h1>
             </div>
-            <div className="grid grid-cols-3 gap-2 sm:min-w-[22rem]">
+            <div className="grid grid-cols-3 gap-2 sm:min-w-[18rem]">
               <SummaryCard label="Assigned" value={summary.assigned} />
               <SummaryCard label="Pending" value={summary.pending} />
               <SummaryCard label="Damage" value={summary.damage} />
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="page-meta-row">
             <DataSourceBadge source={workspace.source} />
             <button
               type="button"
@@ -890,14 +889,14 @@ function DataSourceBadge({ source }: { source: MyAssetsWorkspaceData["source"] }
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em]",
-        source === "live" && "border-primary/26 bg-primary/12 text-primary",
-        source === "mixed" && "border-amber-500/26 bg-amber-500/10 text-amber-200",
-        source === "fallback" && "border-sky-500/26 bg-sky-500/10 text-sky-200",
+        "inline-flex items-center gap-2 text-sm",
+        source === "live" && "text-primary/80",
+        source === "mixed" && "text-amber-200",
+        source === "fallback" && "text-sky-200",
       )}
     >
       <RotateCcw size={13} />
-      {label}
+      <span className="page-meta-item normal-case tracking-normal" style={{ color: "inherit" }}>{label}</span>
     </span>
   );
 }
@@ -930,9 +929,9 @@ function TabButton({
 
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-[1rem] border border-primary/12 bg-card/45 px-3 py-3 text-center">
-      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
-      <div className="mt-2 font-display text-2xl text-foreground">{value}</div>
+    <div className="rounded-[0.9rem] border border-primary/10 bg-card/30 px-3 py-2 text-center">
+      <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
+      <div className="mt-1 font-display text-xl text-foreground">{value}</div>
     </div>
   );
 }

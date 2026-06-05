@@ -153,22 +153,23 @@ export default function DashboardPage() {
   return (
     <SectionShell title="Operations overview" kicker="Dashboard">
       <div className="space-y-4 animate-fade-in sm:space-y-6">
-        <section className="app-panel p-5 sm:p-6">
+        <section className="space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <div className="app-kicker">Action hub</div>
-              <h1 className="app-title mt-2 glow-soft">{roleTitle} dashboard</h1>
+              <div className="app-kicker">{roleTitle} view</div>
+              <h1 className="page-title mt-2 glow-soft">Dashboard</h1>
             </div>
-            <div className="rounded-[1rem] border border-primary/18 bg-primary/8 px-3 py-2">
-              <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-primary/72">Dashboard source</div>
-              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-primary">
-                <BadgeCheck size={13} />
-                {workspace.source === "live" ? "Live data" : workspace.source === "mixed" ? "Mixed data" : "Fallback preview"}
+            <div className="page-meta-row">
+              <div className="inline-flex items-center gap-2 text-sm text-primary/80">
+                <BadgeCheck size={14} />
+                <span className="page-meta-item text-primary/80 normal-case tracking-normal">
+                  {workspace.source === "live" ? "Live data" : workspace.source === "mixed" ? "Mixed data" : "Fallback preview"}
+                </span>
               </div>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="page-meta-row">
             <button
               type="button"
               onClick={() => void refreshWorkspace()}
@@ -179,7 +180,7 @@ export default function DashboardPage() {
               {loading ? "Refreshing" : "Refresh"}
             </button>
             {selectedLocationName !== "All locations" ? (
-              <span className="rounded-full border border-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              <span className="page-meta-item">
                 Scope: {selectedLocationName}
               </span>
             ) : null}

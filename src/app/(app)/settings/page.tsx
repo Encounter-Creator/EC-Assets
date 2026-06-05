@@ -1479,20 +1479,16 @@ export default function SettingsPage() {
   return (
     <SectionShell title="Settings" kicker="Profile + role-aware operational tabs">
       <div className="space-y-4 sm:space-y-6">
-        <section className="app-panel p-5 sm:p-6">
+        <section className="space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="app-kicker">Settings</div>
-              <h1 className="app-title mt-2">Manage profile, users, and operational setup.</h1>
-              <p className="app-subtitle mt-3">Profile and admin tools by role.</p>
+              <h1 className="page-title mt-2">Settings</h1>
             </div>
-            <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Current profile</div>
-              <div className="mt-2 text-sm text-primary">{profileName || "Operator"} | {roleLabel}</div>
-            </div>
+            <div className="page-meta-item text-primary/80 normal-case tracking-normal">{profileName || "Operator"} | {roleLabel}</div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="page-meta-row">
             <button
               type="button"
               onClick={() => void refreshWorkspace()}
@@ -1502,7 +1498,7 @@ export default function SettingsPage() {
               <RefreshCcw size={14} className={cn(loading && "animate-spin")} />
               {loading ? "Refreshing" : "Refresh"}
             </button>
-            <span className="rounded-full border border-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            <span className="page-meta-item">
               Source: {workspace.source === "live" ? "Live data" : workspace.source === "mixed" ? "Mixed data" : "Fallback preview"}
             </span>
           </div>

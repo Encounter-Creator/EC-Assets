@@ -456,24 +456,22 @@ export default function ApprovalsPage() {
   return (
     <SectionShell title="Approvals" kicker="Queue + review panel">
       <div className="space-y-4 sm:space-y-6">
-        <section className="app-panel p-5 sm:p-6">
+        <section className="space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="app-kicker">Approvals</div>
-              <h1 className="app-title mt-2">Review approvals and damage locks.</h1>
-              <p className="app-subtitle mt-3">Work through the active queues for the current scope.</p>
+              <h1 className="page-title mt-2">Approvals</h1>
             </div>
-            <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Queue source</div>
-              <div className="mt-2 flex items-center gap-2 text-sm text-primary">
-                <Users size={15} />
+            <div className="inline-flex items-center gap-2 text-sm text-primary/80">
+              <Users size={15} />
+              <span className="page-meta-item text-primary/80 normal-case tracking-normal">
                 {workspace.source === "live" ? "Live data" : workspace.source === "mixed" ? "Mixed data" : "Fallback preview"}
-              </div>
+              </span>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span className="rounded-full border border-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="page-meta-row">
+            <span className="page-meta-item">
               Scope: {selectedLocationName}
             </span>
             <button
@@ -485,10 +483,10 @@ export default function ApprovalsPage() {
               <RefreshCcw size={14} className={cn(loading && "animate-spin")} />
               {loading ? "Refreshing" : "Refresh"}
             </button>
-            <span className="rounded-full border border-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            <span className="page-meta-item">
               Selected: {validSelectedQueueItemIds.length}
             </span>
-            <span className="rounded-full border border-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            <span className="page-meta-item">
               Visible: {filteredQueueItems.length} / {queueItems.length}
             </span>
           </div>

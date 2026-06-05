@@ -386,23 +386,22 @@ export default function InventoryPage() {
   return (
     <SectionShell title="Inventory" kicker="Grouped catalog">
       <div className="space-y-4 sm:space-y-6">
-        <section className="app-panel p-5 sm:p-6">
+        <section className="space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="app-kicker">Inventory</div>
-              <h1 className="app-title mt-2">Browse grouped assets.</h1>
+              <h1 className="page-title mt-2">Inventory</h1>
             </div>
-            <div className="rounded-[1rem] border border-primary/18 bg-primary/8 px-3 py-2">
-              <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-primary/72">Inventory source</div>
-              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-primary">
-                <RefreshCcw size={13} className={cn(loading && "animate-spin")} />
+            <div className="inline-flex items-center gap-2 text-sm text-primary/80">
+              <RefreshCcw size={13} className={cn(loading && "animate-spin")} />
+              <span className="page-meta-item text-primary/80 normal-case tracking-normal">
                 {workspace.source === "live" ? "Live data" : "Fallback preview"}
-              </div>
+              </span>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span className="rounded-full border border-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="page-meta-row">
+            <span className="page-meta-item">
               Scope: {selectedLocationName}
             </span>
             <button

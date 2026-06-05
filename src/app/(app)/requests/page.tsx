@@ -668,23 +668,21 @@ export default function RequestsPage() {
   return (
     <SectionShell title="Requests" kicker="Asset + Special + Returns + History">
       <div className="space-y-4 sm:space-y-6">
-        <section className="app-panel p-5 sm:p-6">
+        <section className="space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="app-kicker">Requests</div>
-              <h1 className="app-title mt-2">Create and track requests.</h1>
-              <p className="app-subtitle mt-3">Build asset, special, and return requests from the current scope.</p>
+              <h1 className="page-title mt-2">Requests</h1>
             </div>
-            <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Current basket</div>
-              <div className="mt-2 flex items-center gap-2 text-sm text-primary">
-                <ShoppingBasket size={15} />
-                {basketAssets.length} asset item{basketAssets.length === 1 ? "" : "s"}
-              </div>
+            <div className="inline-flex items-center gap-2 text-sm text-primary/80">
+              <ShoppingBasket size={15} />
+              <span className="page-meta-item text-primary/80 normal-case tracking-normal">
+                Basket: {basketAssets.length} item{basketAssets.length === 1 ? "" : "s"}
+              </span>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="page-meta-row">
             <DataSourceBadge source={workspace.source} />
             <button
               type="button"
@@ -695,7 +693,7 @@ export default function RequestsPage() {
               <RefreshCcw size={14} className={cn(loading && "animate-spin")} />
               {loading ? "Refreshing" : "Refresh"}
             </button>
-            <span className="rounded-full border border-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            <span className="page-meta-item">
               Scope: {selectedLocationName}
             </span>
           </div>
@@ -1102,14 +1100,14 @@ function DataSourceBadge({ source }: { source: RequestsWorkspaceData["source"] }
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em]",
-        source === "live" && "border-primary/26 bg-primary/12 text-primary",
-        source === "mixed" && "border-amber-500/26 bg-amber-500/10 text-amber-200",
-        source === "fallback" && "border-sky-500/26 bg-sky-500/10 text-sky-200",
+        "inline-flex items-center gap-2 text-sm",
+        source === "live" && "text-primary/80",
+        source === "mixed" && "text-amber-200",
+        source === "fallback" && "text-sky-200",
       )}
     >
       <ShoppingBasket size={13} />
-      {label}
+      <span className="page-meta-item normal-case tracking-normal" style={{ color: "inherit" }}>{label}</span>
     </span>
   );
 }

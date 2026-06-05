@@ -914,23 +914,21 @@ export default function CheckOutInPage() {
   return (
     <SectionShell title="Check-out/In" kicker="Standard + Permanent + Stationed + Kits">
       <div className="space-y-4 sm:space-y-6">
-        <section className="app-panel p-5 sm:p-6">
+        <section className="space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="app-kicker">Check-out/In</div>
-              <h1 className="app-title mt-2">Run check-out and check-in workflows.</h1>
-              <p className="app-subtitle mt-3">Move between standard, permanent, stationed, kit, return, and QR flows from one workspace.</p>
+              <h1 className="page-title mt-2">Check-out/In</h1>
             </div>
-            <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Workspace source</div>
-              <div className="mt-2 flex items-center gap-2 text-sm text-primary">
-                <ArrowRightLeft size={15} />
+            <div className="inline-flex items-center gap-2 text-sm text-primary/80">
+              <ArrowRightLeft size={15} />
+              <span className="page-meta-item text-primary/80 normal-case tracking-normal">
                 {workspace.source === "live" ? "Live data" : workspace.source === "mixed" ? "Mixed data" : "Fallback preview"}
-              </div>
+              </span>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="page-meta-row">
             <button
               type="button"
               onClick={() => void refreshWorkspace()}
@@ -940,10 +938,10 @@ export default function CheckOutInPage() {
               <RefreshCcw size={14} className={cn(loading && "animate-spin")} />
               {loading ? "Refreshing" : "Refresh"}
             </button>
-            <span className="rounded-full border border-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            <span className="page-meta-item">
               Sign-out pool: {workspace.signOutAssets.length}
             </span>
-            <span className="rounded-full border border-primary/12 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            <span className="page-meta-item">
               Sign-in pool: {workspace.signInAssets.length}
             </span>
           </div>
