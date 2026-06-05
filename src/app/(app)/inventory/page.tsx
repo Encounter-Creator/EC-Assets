@@ -391,12 +391,11 @@ export default function InventoryPage() {
             <div>
               <div className="app-kicker">Inventory</div>
               <h1 className="app-title mt-2">Browse grouped assets.</h1>
-              <p className="app-subtitle mt-3">Filter by scope, department, and status, then drill into physical units.</p>
             </div>
-            <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Inventory source</div>
-              <div className="mt-2 flex items-center gap-2 text-sm text-primary">
-                <RefreshCcw size={14} className={cn(loading && "animate-spin")} />
+            <div className="rounded-[1rem] border border-primary/18 bg-primary/8 px-3 py-2">
+              <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-primary/72">Inventory source</div>
+              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-primary">
+                <RefreshCcw size={13} className={cn(loading && "animate-spin")} />
                 {workspace.source === "live" ? "Live data" : "Fallback preview"}
               </div>
             </div>

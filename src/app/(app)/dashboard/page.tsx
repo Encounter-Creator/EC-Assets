@@ -158,12 +158,11 @@ export default function DashboardPage() {
             <div>
               <div className="app-kicker">Action hub</div>
               <h1 className="app-title mt-2 glow-soft">{roleTitle} dashboard</h1>
-              <p className="app-subtitle mt-3">Jump straight into approvals, returns, inventory, and your current workflow queues.</p>
             </div>
-            <div className="rounded-[1.2rem] border border-primary/18 bg-primary/8 px-4 py-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Dashboard source</div>
-              <div className="mt-2 flex items-center gap-2 text-sm text-primary">
-                <BadgeCheck size={15} />
+            <div className="rounded-[1rem] border border-primary/18 bg-primary/8 px-3 py-2">
+              <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-primary/72">Dashboard source</div>
+              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-primary">
+                <BadgeCheck size={13} />
                 {workspace.source === "live" ? "Live data" : workspace.source === "mixed" ? "Mixed data" : "Fallback preview"}
               </div>
             </div>
