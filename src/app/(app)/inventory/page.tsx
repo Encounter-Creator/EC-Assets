@@ -97,7 +97,10 @@ export default function InventoryPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const requestedAssetId = searchParams.get("assetId");
-  const [workspace, setWorkspace] = useState<InventoryWorkspaceData>(fallbackWorkspace);
+  const [workspace, setWorkspace] = useState<InventoryWorkspaceData>(() => ({
+    ...fallbackWorkspace,
+    warnings: [],
+  }));
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");

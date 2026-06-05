@@ -70,7 +70,10 @@ const tabs = [
 
 export default function SettingsPage() {
   const { isAdmin, isAssetManager, profileName, roles, isConfigured, user, assignedLocationId, assetManagerLocationId } = useAuth();
-  const [workspace, setWorkspace] = useState<SettingsWorkspaceData>(getFallbackSettingsWorkspace());
+  const [workspace, setWorkspace] = useState<SettingsWorkspaceData>(() => ({
+    ...getFallbackSettingsWorkspace(),
+    warnings: [],
+  }));
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
   const [feedback, setFeedback] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(null);

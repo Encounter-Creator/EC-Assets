@@ -57,7 +57,10 @@ export default function ApprovalsPage() {
   const requestedTabValue = searchParams.get("tab");
   const requestedTab: ApprovalTab | null = isApprovalTab(requestedTabValue) ? requestedTabValue : null;
   const requestedItemId = searchParams.get("itemId");
-  const [workspace, setWorkspace] = useState<ApprovalsWorkspaceData>(fallbackApprovalsWorkspace);
+  const [workspace, setWorkspace] = useState<ApprovalsWorkspaceData>(() => ({
+    ...fallbackApprovalsWorkspace,
+    warnings: [],
+  }));
   const [loading, setLoading] = useState(true);
   const [selectedQueueItemIds, setSelectedQueueItemIds] = useState<string[]>([]);
   const [reviewNotesByItemId, setReviewNotesByItemId] = useState<Record<string, string>>({});

@@ -68,7 +68,10 @@ export default function DashboardPage() {
   const { activeLocationId, selectedLocationName } = useLocationScope();
   const role = isAdmin ? "admin" : isAssetManager ? "asset_manager" : isVolunteer ? "volunteer" : "staff";
   const roleTitle = isAdmin ? "Admin" : isAssetManager ? "Asset Manager" : isVolunteer ? "Volunteer" : "Staff";
-  const [workspace, setWorkspace] = useState<DashboardWorkspaceData>(getFallbackDashboardWorkspace(role));
+  const [workspace, setWorkspace] = useState<DashboardWorkspaceData>(() => ({
+    ...getFallbackDashboardWorkspace(role),
+    warnings: [],
+  }));
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
 

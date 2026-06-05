@@ -65,7 +65,10 @@ export default function MyAssetsPage() {
   const requestedTab: "assigned" | "pending" | "damage" | null = isMyAssetsTab(requestedTabValue) ? requestedTabValue : null;
   const [tabState, setTabState] = useState<"assigned" | "pending" | "damage">(requestedTab ?? "assigned");
   const activeTab = requestedTab ?? tabState;
-  const [workspace, setWorkspace] = useState<MyAssetsWorkspaceData>(fallbackWorkspace);
+  const [workspace, setWorkspace] = useState<MyAssetsWorkspaceData>(() => ({
+    ...fallbackWorkspace,
+    warnings: [],
+  }));
   const [loading, setLoading] = useState(true);
   const [selectedPendingIds, setSelectedPendingIds] = useState<string[]>([]);
   const [busyPendingIds, setBusyPendingIds] = useState<string[]>([]);

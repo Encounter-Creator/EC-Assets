@@ -69,7 +69,10 @@ export default function CheckOutInPage() {
   const requestedMode = searchParams.get("mode");
   const requestedAssetId = searchParams.get("assetId");
   const { isAdmin, isAssetManager, isConfigured } = useAuth();
-  const [workspace, setWorkspace] = useState<CheckOperationsWorkspaceData>(getFallbackCheckOperationsWorkspace());
+  const [workspace, setWorkspace] = useState<CheckOperationsWorkspaceData>(() => ({
+    ...getFallbackCheckOperationsWorkspace(),
+    warnings: [],
+  }));
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<OpsTab>(requestedTab ?? "standard");
   const [standardMode, setStandardMode] = useState<"sign_out" | "sign_in">(requestedTab === "standard" && requestedMode === "sign_in" ? "sign_in" : "sign_out");

@@ -120,7 +120,10 @@ export default function RequestsPage() {
   const activeTab: "asset" | "special" | "returns" | "history" =
     requestedTab === "returns" ? "returns" : requestedTab === "special" ? "special" : requestedTab === "history" ? "history" : "asset";
   const scopedActiveLocationId = activeLocationId === "unassigned" ? null : activeLocationId;
-  const [workspace, setWorkspace] = useState<RequestsWorkspaceData>(fallbackWorkspace);
+  const [workspace, setWorkspace] = useState<RequestsWorkspaceData>(() => ({
+    ...fallbackWorkspace,
+    warnings: [],
+  }));
   const [loading, setLoading] = useState(true);
   const [assetSearch, setAssetSearch] = useState("");
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
