@@ -17,7 +17,7 @@ export function LoginForm({
   isResetRecovery: boolean;
 }) {
   const router = useRouter();
-  const { accessState, authStatus, isConfigured, signIn, requestPasswordReset } = useAuth();
+  const { accessState, authStatus, isConfigured, signIn, signUp, requestPasswordReset } = useAuth();
   const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "reset">(isResetRecovery ? "reset" : "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -59,8 +59,29 @@ export function LoginForm({
     }
 
     if (currentMode === "signup") {
+      if (password !== confirmPassword) {
+        setBusy(false);
+        setMessage("Passwords do not match.");
+        return;
+      }
+
+      const result = await signUp(email, password);
       setBusy(false);
-      setMessage("Account creation flow will be added after the initial auth and role-access foundation is complete.");
+      if (result.error) {
+        setMessage(result.error);
+        return;
+      }
+
+      if (result.requiresEmailConfirmation) {
+        setMessage("Account created. Check your email to confirm your address, then sign in for approval.");
+        setMode("signin");
+        setPassword("");
+        setConfirmPassword("");
+        return;
+      }
+
+      setMessage("Account created. Your access is pending approval.");
+      router.replace("/approval-pending");
       return;
     }
 
@@ -139,7 +160,7 @@ export function LoginForm({
               </div>
             )}
 
-            {currentMode === "reset" && (
+            {(currentMode === "reset" || currentMode === "signup") && (
               <div className="space-y-2">
                 <label htmlFor="confirm-password" className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">
                   Confirm password
@@ -147,7 +168,7 @@ export function LoginForm({
                 <input
                   id="confirm-password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Confirm your new password"
+                  placeholder={currentMode === "signup" ? "Confirm your password" : "Confirm your new password"}
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   className="matrix-field flex h-12 w-full rounded-[1.15rem] px-4 text-sm text-foreground outline-none placeholder:text-muted-foreground"

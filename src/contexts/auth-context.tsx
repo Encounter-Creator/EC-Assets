@@ -31,6 +31,7 @@ type AuthContextValue = {
   isStaff: boolean;
   isVolunteer: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string) => Promise<{ error: string | null; requiresEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
   retryAccessLoad: () => Promise<void>;
@@ -244,6 +245,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         return { error: error?.message ?? null };
+      },
+      signUp: async (email, password) => {
+        const supabase = getSupabaseBrowserClient();
+        if (!supabase) {
+          return {
+            error: "Supabase environment variables are not configured yet.",
+            requiresEmailConfirmation: false,
+          };
+        }
+
+        const normalizedEmail = email.trim().toLowerCase();
+        const emailName = normalizedEmail.split("@")[0] || "Operator";
+        const origin = window.location.origin.replace(/\/$/, "");
+        const { data, error } = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password,
+          options: {
+            emailRedirectTo: `${origin}/login`,
+            data: {
+              display_name: emailName,
+              full_name: emailName,
+            },
+          },
+        });
+
+        return {
+          error: error?.message ?? null,
+          requiresEmailConfirmation: Boolean(data.user && !data.session),
+        };
       },
       signOut: async () => {
         const supabase = getSupabaseBrowserClient();
