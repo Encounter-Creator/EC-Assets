@@ -46,7 +46,7 @@ export function AppShell({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const { damageLockCase, isDamageLocked, profileName, roles, signOut, user } = useAuth();
-  const { activeLocationId, locations, selectedLocationId, selectedLocationName, setSelectedLocationId } = useLocationScope();
+  const { activeLocationId, locations, selectedLocationId, setSelectedLocationId } = useLocationScope();
   const notificationRefreshInFlightRef = useRef(false);
   const lastNotificationRefreshAtRef = useRef(0);
   const visibleNavItems = navItems.filter((item) => item.show(roles));
@@ -261,10 +261,6 @@ export function AppShell({
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="hidden items-center gap-2 rounded-full border border-sky-400/30 bg-sky-500/10 px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-300 lg:inline-flex">
-                <MapPin size={14} className="opacity-80" />
-                <span>{selectedLocationName}</span>
-              </div>
               <div className="relative">
                 <button
                   type="button"
