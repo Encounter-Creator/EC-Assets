@@ -375,14 +375,6 @@ export function AppShell({
                 <span className="text-sm">{profileName || "Operator"}</span>
                 <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary/70">{roleLabel}</span>
               </div>
-              <button
-                type="button"
-                onClick={() => void signOut()}
-                className="hidden items-center gap-2 rounded-full border border-destructive/25 bg-card/70 px-4 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10 md:inline-flex"
-              >
-                <LogOut size={14} />
-                Logout
-              </button>
             </div>
           </div>
         </header>
