@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useLocationScope } from "@/contexts/location-scope-context";
+import { MatrixRain } from "@/components/matrix-rain";
 import { getPrimaryRoleLabel, type AppRole } from "@/lib/auth";
 import { dismissNotification as persistDismissNotification, loadNotificationFeed, loadNotifications, matchesNotificationTarget, saveNotifications, clearNotifications as persistClearNotifications, type AppNotification } from "@/lib/notifications";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -212,7 +213,9 @@ export function AppShell({
   };
 
   return (
-    <div className="app-mobile-shell relative flex min-h-screen text-foreground">
+    <div className="app-mobile-shell relative isolate flex min-h-screen text-foreground">
+      <MatrixRain className="opacity-80 mix-blend-screen" />
+      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.08),transparent_28%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.06),transparent_24%)]" />
       <aside className="sticky top-4 ml-4 mr-3 mt-4 hidden h-[calc(100dvh-2rem)] w-[260px] shrink-0 md:flex">
         <Sidebar pathname={pathname} navItems={visibleNavItems} />
       </aside>
@@ -225,7 +228,7 @@ export function AppShell({
             onClick={() => setMobileOpen(false)}
             aria-label="Close navigation overlay"
           />
-          <aside className="fixed inset-y-0 right-0 z-50 w-80 max-w-[88vw] border-l border-primary/12 bg-[hsl(var(--sidebar-background))] p-4 shadow-[var(--shadow-strong)] md:hidden">
+          <aside className="fixed inset-y-0 right-0 z-50 w-80 max-w-[88vw] border-l border-primary/12 bg-[hsl(var(--sidebar-background)/0.72)] p-4 shadow-[var(--shadow-strong)] backdrop-blur-2xl saturate-150 md:hidden">
             <div className="mb-4 flex items-center justify-between">
               <Brand />
               <button
@@ -244,7 +247,7 @@ export function AppShell({
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pt-[var(--app-safe-top)]">
         <header className="sticky top-0 z-30 px-3 py-3 sm:px-6 sm:py-4">
-          <div className="flex items-center justify-between gap-3 rounded-[1.75rem] border border-primary/14 bg-background/92 px-4 py-3 shadow-[var(--shadow-soft)] backdrop-blur-xl">
+          <div className="flex items-center justify-between gap-3 rounded-[1.75rem] border border-primary/14 bg-background/72 px-4 py-3 shadow-[var(--shadow-soft)] backdrop-blur-2xl saturate-150">
             <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
@@ -276,7 +279,7 @@ export function AppShell({
                   <span className="hidden max-w-[10rem] truncate sm:inline">{selectedLocationName}</span>
                 </button>
                 {locationScopeOpen && (
-                  <div className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[18rem] max-w-[88vw] rounded-[1.4rem] border border-primary/16 bg-background/96 p-3 shadow-[var(--shadow-strong)] backdrop-blur-xl">
+                  <div className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[18rem] max-w-[88vw] rounded-[1.4rem] border border-primary/16 bg-background/74 p-3 shadow-[var(--shadow-strong)] backdrop-blur-2xl saturate-150">
                     <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Location scope</div>
                     <div className="mt-1 truncate text-sm text-foreground">{selectedLocationName}</div>
                     {canSelectAllLocations && locations.length > 0 ? (
@@ -337,7 +340,7 @@ export function AppShell({
                   )}
                 </button>
                 {notificationsOpen && (
-                  <div className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[22rem] max-w-[88vw] rounded-[1.4rem] border border-primary/16 bg-background/96 p-4 shadow-[var(--shadow-strong)] backdrop-blur-xl">
+                  <div className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[22rem] max-w-[88vw] rounded-[1.4rem] border border-primary/16 bg-background/74 p-4 shadow-[var(--shadow-strong)] backdrop-blur-2xl saturate-150">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Notifications</div>
@@ -494,7 +497,7 @@ function Sidebar({
   const { signOut } = useAuth();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.8rem] border border-primary/16 bg-card/60 text-sidebar-foreground shadow-[var(--shadow-soft)] backdrop-blur-sm">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.8rem] border border-primary/16 bg-card/42 text-sidebar-foreground shadow-[var(--shadow-soft)] backdrop-blur-2xl saturate-150">
       <div className="border-b border-primary/12 p-4">
         <Brand />
       </div>

@@ -148,9 +148,9 @@ textarea {
 .app-panel {
   border-radius: 1.75rem;
   border: 1px solid hsl(var(--primary) / 0.15);
-  background-color: hsl(var(--card) / 0.95);
+  background-color: hsl(var(--card) / 0.72);
   box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(28px) saturate(150%);
 }
 
 .matrix-field {
@@ -222,9 +222,10 @@ textarea {
   overflow: hidden;
   border-radius: 1.75rem;
   border: 1px solid hsl(var(--primary) / 0.18);
-  background: linear-gradient(145deg, hsl(220 25% 8% / 0.96), hsl(150 36% 10% / 0.92));
+  background: linear-gradient(145deg, hsl(220 25% 8% / 0.74), hsl(150 36% 10% / 0.68));
   color: hsl(var(--foreground));
   box-shadow: 0 0 28px hsl(192 54% 26% / 0.22), 0 18px 42px hsl(140 70% 4% / 0.34);
+  backdrop-filter: blur(24px) saturate(150%);
 }
 
 .matrix-loader-text {
