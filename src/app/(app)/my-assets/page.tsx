@@ -66,7 +66,7 @@ export default function MyAssetsPage() {
   const requestedTabValue = searchParams.get("tab");
   const requestedTab: "assigned" | "pending" | "damage" | null = isMyAssetsTab(requestedTabValue) ? requestedTabValue : null;
   const [tabState, setTabState] = useState<"assigned" | "pending" | "damage">(requestedTab ?? "assigned");
-  const activeTab = requestedTab ?? tabState;
+  const activeTab = tabState;
   const [workspace, setWorkspace] = useState<MyAssetsWorkspaceData>(() => ({
     ...fallbackWorkspace,
     warnings: [],
@@ -94,6 +94,15 @@ export default function MyAssetsPage() {
       message: feedback.message,
     });
   }, [feedback, pushToast]);
+
+  useEffect(() => {
+    if (workspace.pendingItems.length === 0) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [workspace.pendingItems.length]);
   const validSelectedPendingIds = useMemo(
     () => selectedPendingIds.filter((id) => workspace.pendingItems.some((item) => item.id === id)),
     [selectedPendingIds, workspace.pendingItems],
@@ -442,6 +451,107 @@ export default function MyAssetsPage() {
 
   return (
     <SectionShell title="My Assets" kicker="Assigned + Pending + Damage">
+      {workspace.pendingItems.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 py-6 backdrop-blur-xl">
+          <div className="w-full max-w-5xl rounded-[2rem] border border-primary/20 bg-[hsl(var(--background))]/98 p-4 shadow-[var(--shadow-strong)] sm:p-6">
+            <div className="flex flex-col gap-3 border-b border-primary/12 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="app-kicker">Pending approvals</div>
+                <h2 className="mt-2 font-display text-3xl text-foreground glow-soft">Confirm incoming sign-outs</h2>
+                <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                  These requests are blocking until you approve or decline them. You can review each incoming sign-out here before continuing.
+                </p>
+              </div>
+              <div className="rounded-full border border-primary/12 bg-card/45 px-3 py-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                {workspace.pendingItems.length} pending
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
+              <div className="space-y-3">
+                <label className="space-y-2">
+                  <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Shared decline reason</span>
+                  <textarea
+                    value={declineReason}
+                    onChange={(event) => setDeclineReason(event.target.value)}
+                    placeholder="Required if you decline any pending approval."
+                    className="matrix-field min-h-24 w-full rounded-[1.15rem] px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                  />
+                </label>
+                <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 px-4 py-3 text-sm text-muted-foreground">
+                  Approving a sign-out immediately finalizes the incoming item. Declining returns the asset to the sender and requires the shared reason.
+                </div>
+              </div>
+
+              <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
+                {workspace.pendingItems.map((item) => {
+                  const busy = busyPendingIds.includes(item.id);
+                  return (
+                    <div key={`modal-${item.id}`} className={cn("rounded-[1.35rem] border border-primary/12 bg-card/35 p-4", busy && "opacity-75")}>
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
+                                item.type === "assignment"
+                                  ? "border-sky-500/35 bg-sky-500/12 text-sky-300"
+                                  : "border-violet-500/35 bg-violet-500/12 text-violet-300",
+                              )}
+                            >
+                              {item.type === "assignment" ? <PackageCheck size={13} /> : <ArrowLeftRight size={13} />}
+                              {item.type === "assignment" ? "Incoming sign-out" : "Incoming handover"}
+                            </span>
+                          </div>
+                          <div className="mt-3 font-display text-2xl text-foreground glow-soft">{item.title}</div>
+                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                            <span>From: {item.requestedBy}</span>
+                            <span>Location: {item.location}</span>
+                            <span>{item.sentAt}</span>
+                          </div>
+                          {item.notes && <div className="mt-3 text-sm text-muted-foreground">{item.notes}</div>}
+                        </div>
+
+                        <div className="grid gap-2 sm:min-w-[12rem]">
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void handlePendingAction(item, true)}
+                            className="matrix-button inline-flex h-11 items-center justify-center gap-2 rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <CheckCircle2 size={15} />
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy || (item.type === "assignment" && !declineReason.trim())}
+                            onClick={() => void handlePendingAction(item, false)}
+                            className="inline-flex h-11 items-center justify-center gap-2 rounded-[1rem] border border-destructive/22 bg-card/55 px-4 text-sm font-semibold uppercase tracking-[0.14em] text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <XCircle size={15} />
+                            Decline
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        {item.items.map((asset) => (
+                          <div key={`${item.id}-${asset.tag}`} className="rounded-[1.1rem] border border-primary/12 bg-card/40 p-4">
+                            <div className="font-mono text-sm uppercase tracking-[0.14em] text-primary">{asset.tag}</div>
+                            <div className="mt-1 font-display text-lg text-foreground">{asset.name}</div>
+                            <div className="mt-2 text-sm text-muted-foreground">
+                              {[asset.serial, asset.department].filter(Boolean).join(" | ")}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="space-y-4 sm:space-y-6">
         <section className="space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
