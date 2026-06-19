@@ -56,7 +56,14 @@ export function MatrixRain({
     window.addEventListener("resize", resize);
     if (interactive) {
       window.addEventListener("pointermove", move);
+      window.addEventListener("pointerdown", move);
+      window.addEventListener("pointerenter", move);
       window.addEventListener("pointerleave", leave);
+      window.addEventListener("wheel", () => {
+        if (pointer.x !== -9999 && pointer.y !== -9999) {
+          pointer.active = true;
+        }
+      }, { passive: true });
     }
 
     let raf = 0;
@@ -82,8 +89,14 @@ export function MatrixRain({
           const dx = x - pointer.x;
           const dy = y - pointer.y;
           const distance = Math.sqrt(dx * dx + dy * dy);
-          if (distance < pauseRadius) {
-            speed = Math.max(0, (distance - fullStopRadius) / (pauseRadius - fullStopRadius));
+          const influence = Math.max(0, 1 - distance / pauseRadius);
+          if (influence > 0) {
+            const targetDrop = pointer.y / fontSize;
+            drops[i] += (targetDrop - drops[i]) * influence * 0.18;
+            speed = Math.max(0.02, 1 - influence * 0.96);
+          }
+          if (distance < fullStopRadius) {
+            speed = 0;
           }
         }
 
@@ -111,6 +124,8 @@ export function MatrixRain({
       window.removeEventListener("resize", resize);
       if (interactive) {
         window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerdown", move);
+        window.removeEventListener("pointerenter", move);
         window.removeEventListener("pointerleave", leave);
       }
     };
