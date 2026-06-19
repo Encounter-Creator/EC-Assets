@@ -508,11 +508,11 @@ export default function MyAssetsPage() {
                     <div className="mt-4 space-y-3">
                       <label className="space-y-2">
                         <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Receiving user</span>
-                        <div className="matrix-field rounded-[1.15rem] px-4">
+                        <div className="matrix-field rounded-[1.35rem] px-4">
                           <select
                             value={selectedHandoverRecipientId}
                             onChange={(event) => setSelectedHandoverRecipientId(event.target.value)}
-                            className="h-12 w-full bg-transparent text-sm text-foreground outline-none"
+                            className="h-11 w-full bg-transparent text-sm text-foreground outline-none"
                             disabled={loadingHandoverRecipients || submittingHandover}
                           >
                             <option value="" className="bg-[hsl(var(--card))] text-foreground">
@@ -780,11 +780,11 @@ export default function MyAssetsPage() {
                     <div className="mt-4 grid gap-3 lg:grid-cols-2">
                       <label className="space-y-2">
                         <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Affected asset</span>
-                        <div className="matrix-field rounded-[1.15rem] px-4">
+                        <div className="matrix-field rounded-[1.35rem] px-4">
                           <select
                             value={selectedDamageAssetId}
                             onChange={(event) => setDamageAssetId(event.target.value)}
-                            className="h-12 w-full bg-transparent text-sm text-foreground outline-none"
+                            className="h-11 w-full bg-transparent text-sm text-foreground outline-none"
                             disabled={submittingDamage || damageAssetOptions.length === 0}
                           >
                             <option value="" className="bg-[hsl(var(--card))] text-foreground">
@@ -801,11 +801,11 @@ export default function MyAssetsPage() {
 
                       <label className="space-y-2">
                         <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Damage type</span>
-                        <div className="matrix-field rounded-[1.15rem] px-4">
+                        <div className="matrix-field rounded-[1.35rem] px-4">
                           <select
                             value={damageType}
                             onChange={(event) => setDamageType(event.target.value)}
-                            className="h-12 w-full bg-transparent text-sm text-foreground outline-none"
+                            className="h-11 w-full bg-transparent text-sm text-foreground outline-none"
                             disabled={submittingDamage}
                           >
                             {["Physical damage", "Missing parts", "Functional fault", "Loss / theft", "Other"].map((option) => (

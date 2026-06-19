@@ -1932,8 +1932,8 @@ function SelectField({
   return (
     <label className="space-y-2">
       <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">{label}</span>
-      <div className="matrix-field rounded-[1.15rem] px-4">
-        <select value={value} onChange={(event) => onChange(event.target.value)} className="h-12 w-full bg-transparent text-sm text-foreground outline-none">
+      <div className="matrix-field rounded-[1.35rem] px-4">
+        <select value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full bg-transparent text-sm text-foreground outline-none">
           {options.map((option) => (
             <option key={option.value} value={option.value} className="bg-[hsl(var(--card))] text-foreground">
               {option.label}

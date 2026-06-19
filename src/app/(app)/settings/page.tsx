@@ -2615,7 +2615,7 @@ function SelectTextField({
     <label className="space-y-2">
       <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{label}</span>
       <div className="matrix-field rounded-[1rem] px-4">
-        <select value={value} onChange={(event) => onChange(event.target.value)} className="h-12 w-full bg-transparent text-sm text-foreground outline-none">
+        <select value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full bg-transparent text-sm text-foreground outline-none">
           {options.map((option) => (
             <option key={option.value} value={option.value} className="bg-[hsl(var(--card))] text-foreground">
               {option.label}

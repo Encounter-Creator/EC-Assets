@@ -542,7 +542,7 @@ function Field({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-11 rounded-[1rem] border border-primary/14 bg-card/55 px-4 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-primary/30"
+        className="h-11 rounded-[1.25rem] border border-primary/14 bg-card/55 px-4 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-primary/30"
       />
     </label>
   );
@@ -565,7 +565,7 @@ function SelectField({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 rounded-[1rem] border border-primary/14 bg-card/55 px-4 text-sm text-foreground outline-none transition-colors focus:border-primary/30"
+        className="h-11 rounded-[1.25rem] border border-primary/14 bg-card/55 px-4 text-sm text-foreground outline-none transition-colors focus:border-primary/30"
       >
         {options.map((option) => (
           <option key={`${label}-${option.value || option.label}`} value={option.value}>

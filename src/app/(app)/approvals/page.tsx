@@ -625,11 +625,11 @@ export default function ApprovalsPage() {
                     {activeTab === "returns" && availableBulkActions.includes("accept_return") && (
                       <label className="space-y-2">
                         <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Shared final sign-in location</span>
-                        <div className="matrix-field rounded-[1rem] px-4">
+                        <div className="matrix-field rounded-[1.35rem] px-4">
                           <select
                             value={effectiveBulkReturnLocationId}
                             onChange={(event) => setBulkReturnLocationId(event.target.value)}
-                            className="h-12 w-full bg-transparent text-sm text-foreground outline-none"
+                            className="h-11 w-full bg-transparent text-sm text-foreground outline-none"
                           >
                             {workspace.locations.map((location) => (
                               <option key={location.id} value={location.id} className="bg-[hsl(var(--card))] text-foreground">
@@ -746,7 +746,7 @@ export default function ApprovalsPage() {
                   {activeTab === "returns" && (
                     <label className="space-y-2">
                       <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Final sign-in location</span>
-                      <div className="matrix-field rounded-[1.15rem] px-4">
+                      <div className="matrix-field rounded-[1.35rem] px-4">
                         <select
                           value={selectedReturnLocationId}
                           onChange={(event) =>
@@ -756,7 +756,7 @@ export default function ApprovalsPage() {
                               [selectedItem.id]: event.target.value,
                             }))
                           }
-                          className="h-12 w-full bg-transparent text-sm text-foreground outline-none"
+                          className="h-11 w-full bg-transparent text-sm text-foreground outline-none"
                         >
                           {workspace.locations.map((location) => (
                             <option key={location.id} value={location.id} className="bg-[hsl(var(--card))] text-foreground">
@@ -867,11 +867,11 @@ function FilterSelect({
   return (
     <label className="space-y-2">
       <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">{label}</span>
-      <div className="matrix-field rounded-[1.15rem] px-4">
+      <div className="matrix-field rounded-[1.35rem] px-4">
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="h-12 w-full bg-transparent text-sm text-foreground outline-none"
+          className="h-11 w-full bg-transparent text-sm text-foreground outline-none"
         >
           {options.map((option) => (
             <option key={option} value={option} className="bg-[hsl(var(--card))] text-foreground">
