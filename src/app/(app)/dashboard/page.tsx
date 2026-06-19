@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Activity, AlertTriangle, ArrowRight, BadgeCheck, Package, RefreshCcw, RotateCcw, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { DecypherLoader } from "@/components/decypher-loader";
 import { useAuth } from "@/contexts/auth-context";
 import { useLocationScope } from "@/contexts/location-scope-context";
 import { getFallbackDashboardWorkspace, loadDashboardWorkspace, type DashboardCard, type DashboardFeedCard, type DashboardWorkspaceData } from "@/lib/dashboard";
@@ -65,7 +66,7 @@ const dashboardFeedLinks: Record<string, string> = {
 
 export default function DashboardPage() {
   const { isAdmin, isAssetManager, isVolunteer, isConfigured, user } = useAuth();
-  const { activeLocationId, selectedLocationName } = useLocationScope();
+  const { activeLocationId, isReady: isLocationScopeReady, selectedLocationName } = useLocationScope();
   const role = isAdmin ? "admin" : isAssetManager ? "asset_manager" : isVolunteer ? "volunteer" : "staff";
   const roleTitle = isAdmin ? "Admin" : isAssetManager ? "Asset Manager" : isVolunteer ? "Volunteer" : "Staff";
   const [workspace, setWorkspace] = useState<DashboardWorkspaceData>(() => ({
@@ -76,6 +77,8 @@ export default function DashboardPage() {
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
 
   useEffect(() => {
+    if (!isLocationScopeReady) return;
+
     let cancelled = false;
 
     const loadWorkspace = async () => {
@@ -117,7 +120,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeLocationId, isConfigured, role, user]);
+  }, [activeLocationId, isConfigured, isLocationScopeReady, role, user]);
 
   const refreshWorkspace = async () => {
     if (!isConfigured || !user) {
@@ -152,6 +155,11 @@ export default function DashboardPage() {
 
   return (
     <SectionShell title="Operations overview" kicker="Dashboard">
+      {loading || !isLocationScopeReady ? (
+        <div className="relative min-h-[60vh]">
+          <DecypherLoader isReady={true} onComplete={() => undefined} />
+        </div>
+      ) : null}
       <div className="space-y-4 animate-fade-in sm:space-y-6">
         <section className="space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

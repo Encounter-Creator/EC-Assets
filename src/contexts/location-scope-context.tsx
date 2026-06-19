@@ -15,6 +15,7 @@ type LocationScopeValue = {
   selectedLocationId: string;
   selectedLocationName: string;
   activeLocationId: string | null;
+  isReady: boolean;
   canSelectAllLocations: boolean;
   isLocationLocked: boolean;
   assignedLocationId: string | null;
@@ -29,6 +30,7 @@ export function LocationScopeProvider({ children }: { children: ReactNode }) {
   const { user, roles, isAdmin, isAssetManager, isVolunteer, assetManagerLocationId, assignedLocationId, isConfigured } = useAuth();
   const [locations, setLocations] = useState<ScopedLocation[]>([]);
   const [selectedLocationId, setSelectedLocationIdState] = useState("all");
+  const [isReady, setIsReady] = useState(false);
 
   const canSelectAllLocations = isAdmin || roles.includes("staff");
   const lockedLocationId = isAssetManager ? assetManagerLocationId ?? assignedLocationId : isVolunteer ? assignedLocationId : null;
@@ -36,10 +38,20 @@ export function LocationScopeProvider({ children }: { children: ReactNode }) {
   const effectiveSelectedLocationId = !canSelectAllLocations && !lockedLocationId ? "unassigned" : selectedLocationId;
 
   useEffect(() => {
-    if (!isConfigured || !user) return;
+    if (!isConfigured || !user) {
+      queueMicrotask(() => {
+        setIsReady(true);
+      });
+      return;
+    }
 
     const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
+    if (!supabase) {
+      queueMicrotask(() => {
+        setIsReady(true);
+      });
+      return;
+    }
 
     let cancelled = false;
 
@@ -47,43 +59,51 @@ export function LocationScopeProvider({ children }: { children: ReactNode }) {
       .from("locations")
       .select("id, name")
       .order("name")
-      .then(({ data }) => {
-        if (!cancelled) {
-          setLocations((data ?? []) as ScopedLocation[]);
+      .then(({ data, error }) => {
+        if (error && !cancelled) {
+          queueMicrotask(() => {
+            setIsReady(true);
+          });
+          return;
         }
+        if (cancelled) return;
+
+        const nextLocations = (data ?? []) as ScopedLocation[];
+        setLocations(nextLocations);
+
+        if (isLocationLocked) {
+          const nextLocationId = lockedLocationId ?? "all";
+          queueMicrotask(() => {
+            setSelectedLocationIdState((current) => (current === nextLocationId ? current : nextLocationId));
+            setIsReady(true);
+          });
+          return;
+        }
+
+        if (!canSelectAllLocations) {
+          const nextLocationId = lockedLocationId ?? "unassigned";
+          queueMicrotask(() => {
+            setSelectedLocationIdState((current) => (current === nextLocationId ? current : nextLocationId));
+            setIsReady(true);
+          });
+          return;
+        }
+
+        const storageKey = getStorageKey(user.id);
+        const stored = window.localStorage.getItem(storageKey);
+        const isValid = !stored || stored === "all" || nextLocations.some((location) => location.id === stored);
+        const nextLocationId = isValid ? stored || "all" : "all";
+        queueMicrotask(() => {
+          setSelectedLocationIdState((current) => (current === nextLocationId ? current : nextLocationId));
+          setIsReady(true);
+        });
+        if (!isValid) window.localStorage.removeItem(storageKey);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [isConfigured, user]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const applySelection = (nextLocationId: string) => {
-      queueMicrotask(() => {
-        setSelectedLocationIdState((current) => (current === nextLocationId ? current : nextLocationId));
-      });
-    };
-
-    if (isLocationLocked) {
-      applySelection(lockedLocationId ?? "all");
-      return;
-    }
-
-    if (!canSelectAllLocations) {
-      applySelection(lockedLocationId ?? "unassigned");
-      return;
-    }
-
-    const storageKey = getStorageKey(user.id);
-    const stored = window.localStorage.getItem(storageKey);
-    const isValid = !stored || stored === "all" || locations.some((location) => location.id === stored);
-    const nextLocationId = isValid ? stored || "all" : "all";
-    applySelection(nextLocationId);
-    if (!isValid) window.localStorage.removeItem(storageKey);
-  }, [canSelectAllLocations, isLocationLocked, locations, lockedLocationId, user]);
+  }, [canSelectAllLocations, isConfigured, isLocationLocked, lockedLocationId, user]);
 
   const setSelectedLocationId = useCallback(
     (locationId: string) => {
@@ -107,12 +127,13 @@ export function LocationScopeProvider({ children }: { children: ReactNode }) {
       selectedLocationId: effectiveSelectedLocationId,
       selectedLocationName,
       activeLocationId: effectiveSelectedLocationId === "all" ? null : effectiveSelectedLocationId,
+      isReady,
       canSelectAllLocations,
       isLocationLocked,
       assignedLocationId: lockedLocationId,
       setSelectedLocationId,
     }),
-    [canSelectAllLocations, effectiveSelectedLocationId, isLocationLocked, locations, lockedLocationId, selectedLocationName, setSelectedLocationId],
+    [canSelectAllLocations, effectiveSelectedLocationId, isLocationLocked, isReady, locations, lockedLocationId, selectedLocationName, setSelectedLocationId],
   );
 
   return <LocationScopeContext.Provider value={value}>{children}</LocationScopeContext.Provider>;
