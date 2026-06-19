@@ -112,8 +112,8 @@ export default function ApprovalsPage() {
     [filteredQueueItems, selectedItemId],
   );
   const reviewNote = selectedItem ? reviewNotesByItemId[selectedItem.id] ?? selectedItem.note ?? "" : "";
-  const effectiveBulkReturnLocationId = bulkReturnLocationId || workspace.locations[0]?.id || "";
-  const selectedReturnLocationId = selectedItem ? returnLocationByItemId[selectedItem.id] ?? workspace.locations[0]?.id ?? "" : "";
+  const effectiveBulkReturnLocationId = bulkReturnLocationId || activeLocationId || "";
+  const selectedReturnLocationId = selectedItem ? (returnLocationByItemId[selectedItem.id] ?? activeLocationId) || "" : "";
   const selectedQueueItems = useMemo(
     () => filteredQueueItems.filter((item) => validSelectedQueueItemIds.includes(item.id)),
     [filteredQueueItems, validSelectedQueueItemIds],
@@ -637,16 +637,19 @@ export default function ApprovalsPage() {
                       <label className="space-y-2">
                         <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">Shared final sign-in location</span>
                         <div className="matrix-field rounded-[1.35rem] px-4">
-                          <select
-                            value={effectiveBulkReturnLocationId}
-                            onChange={(event) => setBulkReturnLocationId(event.target.value)}
-                            className="h-11 w-full bg-transparent text-sm text-foreground outline-none"
-                          >
-                            {workspace.locations.map((location) => (
-                              <option key={location.id} value={location.id} className="bg-[hsl(var(--card))] text-foreground">
-                                {location.name}
-                              </option>
-                            ))}
+                        <select
+                          value={effectiveBulkReturnLocationId}
+                          onChange={(event) => setBulkReturnLocationId(event.target.value)}
+                          className="h-11 w-full bg-transparent text-sm text-foreground outline-none"
+                        >
+                          <option value="" disabled className="bg-[hsl(var(--card))] text-muted-foreground">
+                            Select a final sign-in location
+                          </option>
+                          {workspace.locations.map((location) => (
+                            <option key={location.id} value={location.id} className="bg-[hsl(var(--card))] text-foreground">
+                              {location.name}
+                            </option>
+                          ))}
                           </select>
                         </div>
                       </label>
@@ -769,6 +772,9 @@ export default function ApprovalsPage() {
                           }
                           className="h-11 w-full bg-transparent text-sm text-foreground outline-none"
                         >
+                          <option value="" disabled className="bg-[hsl(var(--card))] text-muted-foreground">
+                            Select a final sign-in location
+                          </option>
                           {workspace.locations.map((location) => (
                             <option key={location.id} value={location.id} className="bg-[hsl(var(--card))] text-foreground">
                               {location.name}

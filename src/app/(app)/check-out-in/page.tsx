@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/contexts/auth-context";
+import { useLocationScope } from "@/contexts/location-scope-context";
 import {
   deploySundayKit,
   getFallbackCheckOperationsWorkspace,
@@ -96,6 +97,7 @@ export default function CheckOutInPage() {
   const requestedMode = searchParams.get("mode");
   const requestedAssetId = searchParams.get("assetId");
   const { isAdmin, isAssetManager, isConfigured } = useAuth();
+  const { activeLocationId } = useLocationScope();
   const [workspace, setWorkspace] = useState<CheckOperationsWorkspaceData>(() => ({
     ...getFallbackCheckOperationsWorkspace(),
     warnings: [],
@@ -334,13 +336,13 @@ export default function CheckOutInPage() {
     [pendingSundayDeploymentItems, sundayReturnOutcomes],
   );
   const resolvedRecipientId = selectedRecipientId || workspace.recipients[0]?.id || "";
-  const resolvedFinalLocationId = selectedFinalLocationId || workspace.locations[0]?.id || "";
   const resolvedPermanentRecipientId = selectedPermanentRecipientId || workspace.recipients[0]?.id || "";
-  const resolvedPermanentHomeBaseId = selectedPermanentHomeBaseId || workspace.locations[0]?.id || "";
+  const resolvedPermanentHomeBaseId = selectedPermanentHomeBaseId || activeLocationId || "";
   const resolvedStationedRecipientId = selectedStationedRecipientId || workspace.recipients[0]?.id || "";
-  const resolvedStationedLocationId = selectedStationedLocationId || workspace.locations[0]?.id || "";
+  const resolvedStationedLocationId = selectedStationedLocationId || activeLocationId || "";
   const resolvedQrRecipientId = selectedQrRecipientId || workspace.recipients[0]?.id || "";
-  const resolvedQrLocationId = selectedQrLocationId || workspace.locations[0]?.id || "";
+  const resolvedFinalLocationId = selectedFinalLocationId || activeLocationId || "";
+  const resolvedQrLocationId = selectedQrLocationId || activeLocationId || "";
   const resolvedSundayKitId = selectedSundayKitId || workspace.sundayKits[0]?.id || "";
   const resolvedSundayKitRecipientId = selectedSundayKitRecipientId || workspace.recipients[0]?.id || "";
   const resolvedSundayKitLocationId = selectedSundayKitLocationId || workspace.locations[0]?.id || "";
@@ -1131,6 +1133,7 @@ export default function CheckOutInPage() {
                           label: location.name,
                           value: location.id,
                         }))}
+                        placeholder="Select a final sign-in location"
                       />
                       <SelectField
                         label="Outcome"
@@ -1787,6 +1790,7 @@ export default function CheckOutInPage() {
                             label: location.name,
                             value: location.id,
                           }))}
+                          placeholder="Select a final sign-in location"
                         />
                         <SelectField
                           label="Outcome"
@@ -1964,17 +1968,24 @@ function SelectField({
   value,
   onChange,
   options,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: Array<{ label: string; value: string }>;
+  placeholder?: string;
 }) {
   return (
     <label className="space-y-2">
       <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">{label}</span>
       <div className="matrix-field rounded-[1.35rem] px-4">
         <select value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full bg-transparent text-sm text-foreground outline-none">
+          {placeholder ? (
+            <option value="" disabled className="bg-[hsl(var(--card))] text-muted-foreground">
+              {placeholder}
+            </option>
+          ) : null}
           {options.map((option) => (
             <option key={option.value} value={option.value} className="bg-[hsl(var(--card))] text-foreground">
               {option.label}

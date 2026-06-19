@@ -327,7 +327,7 @@ export default function RequestsPage() {
     }
     return specialRequestableAssets[0]?.id ?? "";
   }, [requestedAssetId, requestedTab, resolvedSpecialAssetId, specialRequestableAssets]);
-  const resolvedPreferredReturnLocationId = preferredReturnLocationId || locations[0]?.id || "";
+  const resolvedPreferredReturnLocationId = preferredReturnLocationId || scopedActiveLocationId || "";
 
   useEffect(() => {
     if (!user || activeTab === "history") return;
@@ -1006,6 +1006,7 @@ export default function RequestsPage() {
                       label="Preferred Return Location"
                       value={resolvedPreferredReturnLocationId}
                       options={locations.map((location) => ({ label: location.name, value: location.id }))}
+                      placeholder="Select a preferred return location"
                       onSelect={setPreferredReturnLocationId}
                     />
                     <FormField label="Note" placeholder="Return note for the receiving team" value={returnNote} onChange={setReturnNote} multiline />
@@ -1186,11 +1187,13 @@ function SelectCard({
   value,
   options,
   onSelect,
+  placeholder,
 }: {
   label: string;
   value: string;
   options: string[] | Array<{ label: string; value: string }>;
   onSelect: (value: string) => void;
+  placeholder?: string;
 }) {
   const normalizedOptions = options.map((option) => (typeof option === "string" ? { label: option, value: option } : option));
   return (
@@ -1198,6 +1201,11 @@ function SelectCard({
       <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">{label}</span>
       <div className="matrix-field rounded-[1.35rem] px-4">
         <select value={value} onChange={(event) => onSelect(event.target.value)} className="h-11 w-full bg-transparent text-sm text-foreground outline-none">
+          {placeholder ? (
+            <option value="" disabled className="bg-[hsl(var(--card))] text-muted-foreground">
+              {placeholder}
+            </option>
+          ) : null}
           {normalizedOptions.map((option) => (
             <option key={option.value} value={option.value} className="bg-[hsl(var(--card))] text-foreground">
               {option.label}
