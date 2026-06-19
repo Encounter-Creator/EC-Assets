@@ -1042,7 +1042,7 @@ export default function CheckOutInPage() {
                         value={resolvedRecipientId}
                         onChange={setSelectedRecipientId}
                         options={workspace.recipients.map((recipient) => ({
-                          label: `${recipient.full_name} | ${recipient.home_base ?? "No home base"} | ${recipient.role}`,
+                          label: recipient.full_name,
                           value: recipient.id,
                         }))}
                       />
@@ -1190,7 +1190,7 @@ export default function CheckOutInPage() {
                       value={resolvedPermanentRecipientId}
                       onChange={setSelectedPermanentRecipientId}
                       options={workspace.recipients.map((recipient) => ({
-                        label: `${recipient.full_name} | ${recipient.home_base ?? "No home base"} | ${recipient.role}`,
+                        label: recipient.full_name,
                         value: recipient.id,
                       }))}
                     />
@@ -1285,7 +1285,7 @@ export default function CheckOutInPage() {
                         value={resolvedStationedRecipientId}
                         onChange={setSelectedStationedRecipientId}
                         options={workspace.recipients.map((recipient) => ({
-                          label: `${recipient.full_name} | ${recipient.home_base ?? "No home base"} | ${recipient.role}`,
+                          label: recipient.full_name,
                           value: recipient.id,
                         }))}
                       />
@@ -1451,7 +1451,7 @@ export default function CheckOutInPage() {
                           value={resolvedSundayKitRecipientId}
                           onChange={setSelectedSundayKitRecipientId}
                           options={workspace.recipients.map((recipient) => ({
-                            label: `${recipient.full_name} | ${recipient.home_base ?? "No home base"} | ${recipient.role}`,
+                            label: recipient.full_name,
                             value: recipient.id,
                           }))}
                         />
@@ -1732,7 +1732,7 @@ export default function CheckOutInPage() {
                         value={resolvedQrRecipientId}
                         onChange={setSelectedQrRecipientId}
                         options={workspace.recipients.map((recipient) => ({
-                          label: `${recipient.full_name} | ${recipient.home_base ?? "No home base"} | ${recipient.role}`,
+                          label: recipient.full_name,
                           value: recipient.id,
                         }))}
                       />
