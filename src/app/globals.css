@@ -174,6 +174,38 @@ textarea {
     0 14px 34px hsl(140 70% 4% / 0.32);
 }
 
+.matrix-field select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 100%;
+  height: 3rem;
+  border: 0;
+  border-radius: inherit;
+  background-color: transparent;
+  background-image:
+    linear-gradient(45deg, transparent 50%, hsl(var(--primary) / 0.92) 50%),
+    linear-gradient(135deg, hsl(var(--primary) / 0.92) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.05rem) calc(50% - 0.18rem),
+    calc(100% - 0.8rem) calc(50% - 0.18rem);
+  background-size: 0.42rem 0.42rem, 0.42rem 0.42rem;
+  background-repeat: no-repeat;
+  color: inherit;
+  cursor: pointer;
+  outline: none;
+  padding-right: 2.4rem;
+}
+
+.matrix-field select:focus {
+  box-shadow: none;
+}
+
+.matrix-field select option {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
 .matrix-button {
   border: 0.16em solid hsl(142 86% 54%);
   color: hsl(151 92% 70%);
