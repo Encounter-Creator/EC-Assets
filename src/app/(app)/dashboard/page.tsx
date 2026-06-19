@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Activity, AlertTriangle, ArrowRight, BadgeCheck, Package, RefreshCcw, RotateCcw, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { DecypherLoader } from "@/components/decypher-loader";
 import { useAuth } from "@/contexts/auth-context";
 import { useLocationScope } from "@/contexts/location-scope-context";
 import { getFallbackDashboardWorkspace, loadDashboardWorkspace, type DashboardCard, type DashboardFeedCard, type DashboardWorkspaceData } from "@/lib/dashboard";
@@ -155,12 +154,12 @@ export default function DashboardPage() {
 
   return (
     <SectionShell title="Operations overview" kicker="Dashboard">
-      {loading || !isLocationScopeReady ? (
-        <div className="relative min-h-[60vh]">
-          <DecypherLoader isReady={true} onComplete={() => undefined} />
-        </div>
-      ) : null}
       <div className="space-y-4 animate-fade-in sm:space-y-6">
+        {loading || !isLocationScopeReady ? (
+          <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 px-4 py-3 text-sm text-muted-foreground">
+            Loading dashboard data…
+          </div>
+        ) : null}
         <section className="space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
