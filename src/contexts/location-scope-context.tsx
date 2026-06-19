@@ -91,19 +91,26 @@ export function LocationScopeProvider({ children }: { children: ReactNode }) {
 
         const storageKey = getStorageKey(user.id);
         const stored = window.localStorage.getItem(storageKey);
-        const isValid = !stored || stored === "all" || nextLocations.some((location) => location.id === stored);
-        const nextLocationId = isValid ? stored || "all" : "all";
+        const assignedDefault = lockedLocationId ?? assignedLocationId ?? "all";
+        const isValid =
+          !stored ||
+          stored === "all" ||
+          stored === "unassigned" ||
+          nextLocations.some((location) => location.id === stored);
+        const nextLocationId = isValid ? stored || assignedDefault : assignedDefault;
         queueMicrotask(() => {
           setSelectedLocationIdState((current) => (current === nextLocationId ? current : nextLocationId));
           setIsReady(true);
         });
-        if (!isValid) window.localStorage.removeItem(storageKey);
+        if (!isValid) {
+          window.localStorage.setItem(storageKey, assignedDefault);
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [canSelectAllLocations, isConfigured, isLocationLocked, lockedLocationId, user]);
+  }, [assignedLocationId, canSelectAllLocations, isConfigured, isLocationLocked, lockedLocationId, user]);
 
   const setSelectedLocationId = useCallback(
     (locationId: string) => {

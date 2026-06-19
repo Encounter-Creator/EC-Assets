@@ -468,7 +468,7 @@ export default function CheckOutInPage() {
       setFeedback({ tone: "error", message: "Select at least one assigned asset to sign in." });
       return;
     }
-    if (!selectedFinalLocationId) {
+    if (!resolvedFinalLocationId) {
       setFeedback({ tone: "error", message: "Choose a final sign-in location." });
       return;
     }
