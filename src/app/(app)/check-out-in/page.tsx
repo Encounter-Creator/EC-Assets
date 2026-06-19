@@ -63,6 +63,32 @@ function mergeQrCodes(currentValue: string, nextCodes: string[]) {
   return merged.join("\n");
 }
 
+function formatSignOutFailure(error: unknown) {
+  if (error && typeof error === "object") {
+    const maybeError = error as { message?: string; code?: string; details?: string; hint?: string };
+    const message = maybeError.message?.trim() ?? "";
+    if (message.includes("Selected assets must share one source location")) {
+      return {
+        title: "Mixed locations",
+        message: "Select assets from one source location before signing them out together.",
+      };
+    }
+    const code = maybeError.code?.trim();
+    const details = maybeError.details?.trim();
+    const hint = maybeError.hint?.trim();
+    const segments = [message || "The sign-out could not be completed.", details, hint].filter(Boolean);
+    return {
+      title: "Failed to sign out",
+      message: code ? `Standard sign out failed [${code}]: ${segments.join(" | ")}` : `Standard sign out failed: ${segments.join(" | ")}`,
+    };
+  }
+
+  return {
+    title: "Failed to sign out",
+    message: "Standard sign out failed: The sign-out could not be completed.",
+  };
+}
+
 export default function CheckOutInPage() {
   const searchParams = useSearchParams();
   const requestedTabValue = searchParams.get("tab");
@@ -395,21 +421,6 @@ export default function CheckOutInPage() {
     setter((current) => (current.includes(assetId) ? current.filter((id) => id !== assetId) : [...current, assetId]));
   };
 
-  const formatOperationError = (action: string, error: unknown, fallbackMessage: string) => {
-    if (error && typeof error === "object") {
-      const maybeError = error as { message?: string; code?: string; details?: string; hint?: string };
-      const code = maybeError.code?.trim();
-      const message = maybeError.message?.trim() || fallbackMessage;
-      const details = maybeError.details?.trim();
-      const hint = maybeError.hint?.trim();
-      const segments = [message, details, hint].filter(Boolean);
-      const description = segments.join(" | ");
-      return code ? `${action} failed [${code}]: ${description}` : `${action} failed: ${description}`;
-    }
-
-    return `${action} failed: ${fallbackMessage}`;
-  };
-
   const handleSignOut = async () => {
     if (selectedSignOutAssetIds.length === 0) {
       setFeedback({ tone: "error", message: "Select at least one asset to sign out." });
@@ -442,9 +453,9 @@ export default function CheckOutInPage() {
       setOperationNote("");
       await refreshWorkspace();
     } catch (error) {
-      const message = formatOperationError("Standard sign out", error, "The sign-out could not be completed.");
-      setFeedback({ tone: "error", message });
-      toastTitleOverrideRef.current = "Failed to sign out";
+      const failure = formatSignOutFailure(error);
+      setFeedback({ tone: "error", message: failure.message });
+      toastTitleOverrideRef.current = failure.title;
     } finally {
       setBusy(null);
     }
