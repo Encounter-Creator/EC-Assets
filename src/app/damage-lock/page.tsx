@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { DecypherText } from "@/components/decypher-text";
 import { MatrixRain } from "@/components/matrix-rain";
 import { useAuth } from "@/contexts/auth-context";
+import { useToast } from "@/components/toast";
 import { submitDamageLockStatement } from "@/lib/damage-lock";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -21,9 +22,19 @@ function formatDateTime(value: string | null | undefined) {
 export default function DamageLockPage() {
   const { accessState, authStatus, damageLockCase, isConfigured, retryAccessLoad } = useAuth();
   const router = useRouter();
+  const { pushToast } = useToast();
   const [statement, setStatement] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "error" | "success" | "info"; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!feedback) return;
+    pushToast({
+      tone: feedback.tone,
+      title: feedback.tone === "error" ? "Error" : feedback.tone === "success" ? "Success" : "Info",
+      message: feedback.message,
+    });
+  }, [feedback, pushToast]);
 
   useEffect(() => {
     if (!isConfigured || authStatus !== "signed_in") return;

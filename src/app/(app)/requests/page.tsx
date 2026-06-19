@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useLocationScope } from "@/contexts/location-scope-context";
+import { useToast } from "@/components/toast";
 import { getAssetStatusLabel, getStatusBadgeClass, normalizeAssetStatus } from "@/lib/assets";
 import {
   fallbackAssignedForReturn,
@@ -117,6 +118,7 @@ export default function RequestsPage() {
   const requestedAssetId = searchParams.get("assetId");
   const { user, isAdmin, isStaff, isConfigured } = useAuth();
   const { activeLocationId, selectedLocationName, locations } = useLocationScope();
+  const { pushToast } = useToast();
   const activeTab: "asset" | "special" | "returns" | "history" =
     requestedTab === "returns" ? "returns" : requestedTab === "special" ? "special" : requestedTab === "history" ? "history" : "asset";
   const scopedActiveLocationId = activeLocationId === "unassigned" ? null : activeLocationId;
@@ -143,6 +145,15 @@ export default function RequestsPage() {
   const [submittingReturnRequest, setSubmittingReturnRequest] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [draftHydratedTab, setDraftHydratedTab] = useState<RequestDraftTab | null>(null);
+
+  useEffect(() => {
+    if (!feedback) return;
+    pushToast({
+      tone: feedback.tone,
+      title: feedback.tone === "error" ? "Error" : feedback.tone === "success" ? "Success" : "Info",
+      message: feedback.message,
+    });
+  }, [feedback, pushToast]);
 
   const canUseRequests = isAdmin || isStaff;
   const replaceRequestsRoute = (tab: "asset" | "special" | "returns" | "history", assetId?: string | null) => {
@@ -740,10 +751,6 @@ export default function RequestsPage() {
               <div className="space-y-4">
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
                   <div className="space-y-4 rounded-[1.35rem] border border-primary/12 bg-card/20 p-4">
-                    <StepCard
-                      title="Browse and build one shared asset basket"
-                    />
-
                     <div className="matrix-field flex h-12 items-center gap-2 rounded-[1.15rem] px-4">
                       <PackageCheck size={16} className="text-primary/72" />
                       <input
@@ -802,10 +809,6 @@ export default function RequestsPage() {
                   </div>
 
                   <div className="space-y-4 rounded-[1.35rem] border border-primary/12 bg-card/20 p-4">
-                    <StepCard
-                      title="Shared basket details and live submit"
-                    />
-
                     <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
                       <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Selected units</div>
                       <div className="mt-3 space-y-2">

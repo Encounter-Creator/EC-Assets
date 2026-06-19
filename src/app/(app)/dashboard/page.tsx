@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useLocationScope } from "@/contexts/location-scope-context";
+import { useToast } from "@/components/toast";
 import { getFallbackDashboardWorkspace, loadDashboardWorkspace, type DashboardCard, type DashboardFeedCard, type DashboardWorkspaceData } from "@/lib/dashboard";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -66,6 +67,7 @@ const dashboardFeedLinks: Record<string, string> = {
 export default function DashboardPage() {
   const { isAdmin, isAssetManager, isVolunteer, isConfigured, user } = useAuth();
   const { activeLocationId, isReady: isLocationScopeReady, selectedLocationName } = useLocationScope();
+  const { pushToast } = useToast();
   const role = isAdmin ? "admin" : isAssetManager ? "asset_manager" : isVolunteer ? "volunteer" : "staff";
   const roleTitle = isAdmin ? "Admin" : isAssetManager ? "Asset Manager" : isVolunteer ? "Volunteer" : "Staff";
   const [workspace, setWorkspace] = useState<DashboardWorkspaceData>(() => ({
@@ -74,6 +76,15 @@ export default function DashboardPage() {
   }));
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+
+  useEffect(() => {
+    if (!feedback) return;
+    pushToast({
+      tone: feedback.tone,
+      title: feedback.tone === "error" ? "Error" : "Info",
+      message: feedback.message,
+    });
+  }, [feedback, pushToast]);
 
   useEffect(() => {
     if (!isLocationScopeReady) return;

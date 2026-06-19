@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/contexts/auth-context";
+import { useToast } from "@/components/toast";
 import {
   createDepartment,
   createConsumable,
@@ -71,6 +72,7 @@ const tabs = [
 export default function SettingsPage() {
   const router = useRouter();
   const { isAdmin, isAssetManager, profileName, roles, isConfigured, user, assignedLocationId, assetManagerLocationId } = useAuth();
+  const { pushToast } = useToast();
   const [workspace, setWorkspace] = useState<SettingsWorkspaceData>(() => ({
     ...getFallbackSettingsWorkspace(),
     warnings: [],
@@ -147,6 +149,15 @@ export default function SettingsPage() {
   const [qrCreatedTo, setQrCreatedTo] = useState("");
   const [qrPreviewAssets, setQrPreviewAssets] = useState<QrExportAsset[]>([]);
   const [loadingQrPreview, setLoadingQrPreview] = useState(false);
+
+  useEffect(() => {
+    if (!feedback) return;
+    pushToast({
+      tone: feedback.tone,
+      title: feedback.tone === "error" ? "Error" : feedback.tone === "success" ? "Success" : "Info",
+      message: feedback.message,
+    });
+  }, [feedback, pushToast]);
 
   const visibleTabs = useMemo(
     () => tabs.filter((tab) => tab.show(isAdmin, isAssetManager)),

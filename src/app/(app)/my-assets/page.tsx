@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/contexts/auth-context";
+import { useToast } from "@/components/toast";
 import { getAssetStatusLabel, getStatusBadgeClass, normalizeAssetStatus } from "@/lib/assets";
 import {
   fallbackAssignedAssets,
@@ -58,6 +59,7 @@ function isMyAssetsTab(value: string | null): value is "assigned" | "pending" | 
 
 export default function MyAssetsPage() {
   const { damageLockCase, isConfigured, isDamageLocked, retryAccessLoad, user } = useAuth();
+  const { pushToast } = useToast();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -84,6 +86,14 @@ export default function MyAssetsPage() {
   const [damageDescription, setDamageDescription] = useState("");
   const [submittingDamage, setSubmittingDamage] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  useEffect(() => {
+    if (!feedback) return;
+    pushToast({
+      tone: feedback.tone,
+      title: feedback.tone === "error" ? "Error" : feedback.tone === "success" ? "Success" : "Info",
+      message: feedback.message,
+    });
+  }, [feedback, pushToast]);
   const validSelectedPendingIds = useMemo(
     () => selectedPendingIds.filter((id) => workspace.pendingItems.some((item) => item.id === id)),
     [selectedPendingIds, workspace.pendingItems],

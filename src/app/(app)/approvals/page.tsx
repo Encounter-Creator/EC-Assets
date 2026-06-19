@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/contexts/auth-context";
 import { useLocationScope } from "@/contexts/location-scope-context";
+import { useToast } from "@/components/toast";
 import {
   acceptReturnApproval,
   fallbackApprovalsWorkspace,
@@ -51,6 +52,7 @@ function isApprovalTab(value: string | null): value is ApprovalTab {
 export default function ApprovalsPage() {
   const { isAdmin, isAssetManager, isConfigured } = useAuth();
   const { activeLocationId, selectedLocationName } = useLocationScope();
+  const { pushToast } = useToast();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -71,6 +73,15 @@ export default function ApprovalsPage() {
   const [queueQuery, setQueueQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<QueueStatusFilter>("all");
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+
+  useEffect(() => {
+    if (!feedback) return;
+    pushToast({
+      tone: feedback.tone,
+      title: feedback.tone === "error" ? "Error" : feedback.tone === "success" ? "Success" : "Info",
+      message: feedback.message,
+    });
+  }, [feedback, pushToast]);
 
   const activeTab: ApprovalTab = requestedTab ?? "recipient";
   const queueItems = workspace.queues[activeTab];

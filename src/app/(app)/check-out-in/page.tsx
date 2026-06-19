@@ -27,6 +27,7 @@ import {
 } from "@/lib/check-operations";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/toast";
 
 import { SectionShell } from "../layout";
 
@@ -129,6 +130,8 @@ export default function CheckOutInPage() {
   const qrAnimationFrameRef = useRef<number | null>(null);
   const qrDetectedCodesRef = useRef<Set<string>>(new Set());
   const qrDetectingRef = useRef(false);
+  const toastTitleOverrideRef = useRef<string | null>(null);
+  const { pushToast } = useToast();
   const qrCameraSupported =
     typeof window !== "undefined" &&
     typeof navigator !== "undefined" &&
@@ -222,6 +225,16 @@ export default function CheckOutInPage() {
       stopQrCamera();
     }
   }, [activeTab, qrCameraActive]);
+
+  useEffect(() => {
+    if (!feedback) return;
+    pushToast({
+      tone: feedback.tone,
+      title: toastTitleOverrideRef.current ?? (feedback.tone === "error" ? "Error" : feedback.tone === "success" ? "Success" : "Info"),
+      message: feedback.message,
+    });
+    toastTitleOverrideRef.current = null;
+  }, [feedback, pushToast]);
 
   const refreshWorkspace = async () => {
     if (!isConfigured) {
@@ -382,6 +395,21 @@ export default function CheckOutInPage() {
     setter((current) => (current.includes(assetId) ? current.filter((id) => id !== assetId) : [...current, assetId]));
   };
 
+  const formatOperationError = (action: string, error: unknown, fallbackMessage: string) => {
+    if (error && typeof error === "object") {
+      const maybeError = error as { message?: string; code?: string; details?: string; hint?: string };
+      const code = maybeError.code?.trim();
+      const message = maybeError.message?.trim() || fallbackMessage;
+      const details = maybeError.details?.trim();
+      const hint = maybeError.hint?.trim();
+      const segments = [message, details, hint].filter(Boolean);
+      const description = segments.join(" | ");
+      return code ? `${action} failed [${code}]: ${description}` : `${action} failed: ${description}`;
+    }
+
+    return `${action} failed: ${fallbackMessage}`;
+  };
+
   const handleSignOut = async () => {
     if (selectedSignOutAssetIds.length === 0) {
       setFeedback({ tone: "error", message: "Select at least one asset to sign out." });
@@ -407,13 +435,16 @@ export default function CheckOutInPage() {
       });
       if (error) throw error;
 
-      setFeedback({ tone: "success", message: `${selectedSignOutAssetIds.length} asset item${selectedSignOutAssetIds.length === 1 ? "" : "s"} signed out.` });
+      const successMessage = `${selectedSignOutAssetIds.length} asset item${selectedSignOutAssetIds.length === 1 ? "" : "s"} signed out.`;
+      setFeedback({ tone: "success", message: successMessage });
+      toastTitleOverrideRef.current = "Signed out";
       setSelectedSignOutAssetIds([]);
       setOperationNote("");
       await refreshWorkspace();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Standard sign-out failed.";
+      const message = formatOperationError("Standard sign out", error, "The sign-out could not be completed.");
       setFeedback({ tone: "error", message });
+      toastTitleOverrideRef.current = "Failed to sign out";
     } finally {
       setBusy(null);
     }
