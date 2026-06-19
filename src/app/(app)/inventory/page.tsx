@@ -20,78 +20,8 @@ const fallbackWorkspace: InventoryWorkspaceData = {
   warnings: ["Supabase is not configured yet, so Inventory is using the rebuild preview dataset."],
 };
 
-type InventoryQuickAction = {
-  label: string;
-  href: string;
-  tone?: "default" | "warning";
-};
-
-function getInventoryActionSummary(status: AssetStatus) {
-  switch (normalizeAssetStatus(status)) {
-    case "available":
-      return "Available units can move directly into request or operational issue workflows.";
-    case "assigned":
-      return "Assigned units usually need return, sign-in, or reassignment handling next.";
-    case "traveling":
-      return "Traveling units should be brought back through sign-in or reviewed for follow-up handling.";
-    case "stationed":
-      return "Stationed units can move into temporary-use or return-to-site handling.";
-    case "damaged":
-      return "Damaged units are operationally blocked and should route into damage review.";
-    default:
-      return "Choose the next compatible workflow from the actions below.";
-  }
-}
-
-function getInventoryQuickActions(input: {
-  assetId: string;
-  status: AssetStatus;
-  isAdmin: boolean;
-  isAssetManager: boolean;
-  isStaff: boolean;
-}) {
-  const normalizedStatus = normalizeAssetStatus(input.status);
-  const actions: InventoryQuickAction[] = [];
-
-  if ((input.isAdmin || input.isStaff) && normalizedStatus === "available") {
-    actions.push({ label: "Open Asset Request", href: `/requests?tab=asset&assetId=${encodeURIComponent(input.assetId)}` });
-  }
-
-  if ((input.isAdmin || input.isStaff) && ["assigned", "stationed", "traveling"].includes(normalizedStatus)) {
-    actions.push({ label: "Open Special Request", href: `/requests?tab=special&assetId=${encodeURIComponent(input.assetId)}` });
-  }
-
-  if ((input.isAdmin || input.isStaff) && ["assigned", "traveling", "stationed"].includes(normalizedStatus)) {
-    actions.push({ label: "Open Return Request", href: `/requests?tab=returns&assetId=${encodeURIComponent(input.assetId)}` });
-  }
-
-  if ((input.isAdmin || input.isAssetManager) && normalizedStatus === "available") {
-    actions.push({ label: "Open Standard Sign Out", href: `/check-out-in?tab=standard&mode=sign_out&assetId=${encodeURIComponent(input.assetId)}` });
-    actions.push({ label: "Open Permanent Issue", href: `/check-out-in?tab=permanent&mode=direct_issue&assetId=${encodeURIComponent(input.assetId)}` });
-    actions.push({ label: "Open Stationed Checkout", href: `/check-out-in?tab=stationed&mode=temporary_use&assetId=${encodeURIComponent(input.assetId)}` });
-  }
-
-  if ((input.isAdmin || input.isAssetManager) && ["assigned", "traveling"].includes(normalizedStatus)) {
-    actions.push({ label: "Open Standard Sign In", href: `/check-out-in?tab=standard&mode=sign_in&assetId=${encodeURIComponent(input.assetId)}` });
-  }
-
-  if ((input.isAdmin || input.isAssetManager) && normalizedStatus === "assigned") {
-    actions.push({ label: "Open Permanent Reassign", href: `/check-out-in?tab=permanent&mode=reassign&assetId=${encodeURIComponent(input.assetId)}` });
-  }
-
-  if ((input.isAdmin || input.isAssetManager) && normalizedStatus === "stationed") {
-    actions.push({ label: "Open Return-To-Site", href: `/check-out-in?tab=stationed&mode=return_to_site&assetId=${encodeURIComponent(input.assetId)}` });
-  }
-
-  if ((input.isAdmin || input.isAssetManager) && normalizedStatus === "damaged") {
-    actions.push({ label: "Review Damage Queue", href: "/approvals?tab=damage_locks", tone: "warning" });
-  }
-
-  return actions;
-}
-
 export default function InventoryPage() {
-  const { isAdmin, isAssetManager, isStaff, isConfigured } = useAuth();
+  const { isAdmin, isAssetManager, isConfigured, isStaff } = useAuth();
   const { activeLocationId, selectedLocationName } = useLocationScope();
   const router = useRouter();
   const pathname = usePathname();
@@ -379,10 +309,6 @@ export default function InventoryPage() {
     }
   };
 
-  const openAssetWorkflow = (href: string) => {
-    router.push(href);
-  };
-
   return (
     <SectionShell title="Inventory" kicker="Grouped catalog">
       <div className="space-y-4 sm:space-y-6">
@@ -469,8 +395,8 @@ export default function InventoryPage() {
           </div>
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-          <div className="app-panel overflow-hidden">
+        <section className="grid gap-4 items-start xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+          <div className="app-panel h-fit self-start overflow-hidden">
             <div className="border-b border-primary/12 px-5 py-4">
               <div className="app-kicker">Grouped items</div>
               <div className="mt-2 text-sm text-muted-foreground">
@@ -517,7 +443,7 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          <div className="app-panel overflow-hidden">
+          <div className="app-panel h-fit self-start overflow-hidden">
             <div className="border-b border-primary/12 px-5 py-4">
               <div className="app-kicker">Unit drill-in</div>
               <div className="mt-2 font-display text-2xl text-foreground glow-soft">
@@ -584,9 +510,7 @@ export default function InventoryPage() {
                       <div className="font-display text-2xl text-foreground glow-soft">{selectedAsset.name}</div>
                       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                         <span>Tag: {selectedAsset.tag}</span>
-                        <span>Serial: {selectedAsset.serial}</span>
                         <span>Location: {selectedAsset.location}</span>
-                        <span>Department: {selectedAsset.department}</span>
                         <span>Holder: {selectedAsset.holder}</span>
                       </div>
                     </div>
@@ -629,9 +553,9 @@ export default function InventoryPage() {
                             type="button"
                             onClick={() => void saveAssetEdits()}
                             disabled={savingAssetEdit}
-                            className="matrix-button inline-flex h-11 w-full items-center justify-center rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
+                            className="matrix-button inline-flex h-11 w-full items-center justify-center rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.12em] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {savingAssetEdit ? "Saving Asset" : "Save Allowed Edits"}
+                            {savingAssetEdit ? "Saving..." : "Save Changes"}
                           </button>
                         </div>
                       ) : (
@@ -643,37 +567,6 @@ export default function InventoryPage() {
                           <div className="pt-2 text-primary/80">Only admin and asset-manager roles can save changes.</div>
                         </div>
                       )}
-                    </div>
-
-                    <div className="rounded-[1rem] border border-primary/12 bg-card/35 p-4">
-                      <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Quick actions</div>
-                      <div className="mt-3 rounded-[0.95rem] border border-primary/12 bg-card/40 px-4 py-3 text-sm text-muted-foreground">
-                        {getInventoryActionSummary(selectedAsset.status)}
-                      </div>
-                      <div className="mt-3 grid gap-2">
-                        {getInventoryQuickActions({
-                          assetId: selectedAsset.id,
-                          status: selectedAsset.status,
-                          isAdmin,
-                          isAssetManager,
-                          isStaff,
-                        }).map((action) => (
-                          <button
-                            key={action.href}
-                            type="button"
-                            onClick={() => openAssetWorkflow(action.href)}
-                            className={cn(
-                              "rounded-[0.95rem] border px-4 py-3 text-left text-sm font-medium transition-colors",
-                              action.tone === "warning"
-                                ? "border-destructive/20 bg-card/55 text-destructive hover:bg-destructive/10"
-                                : "border-primary/18 bg-card/55 text-foreground hover:bg-primary/8 hover:text-primary",
-                            )}
-                          >
-                            {action.label}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="mt-3 text-sm text-muted-foreground">Open the next compatible workflow for this unit.</div>
                     </div>
 
                     <div className="rounded-[1rem] border border-primary/12 bg-card/35 p-4">
