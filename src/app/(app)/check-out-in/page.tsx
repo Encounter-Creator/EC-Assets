@@ -1022,10 +1022,6 @@ export default function CheckOutInPage() {
                 {standardMode === "sign_out" ? (
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
                     <div className="space-y-4 rounded-[1.35rem] border border-primary/12 bg-card/20 p-4">
-                      <WorkspaceCard
-                        title="Asset-first sign out"
-                        body="Select available assets and assign them to one recipient."
-                      />
                       <AssetSelectionList
                         assets={workspace.signOutAssets}
                         selectedIds={selectedSignOutAssetIds}
@@ -1070,10 +1066,6 @@ export default function CheckOutInPage() {
                 ) : (
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
                     <div className="space-y-4 rounded-[1.35rem] border border-primary/12 bg-card/20 p-4">
-                      <WorkspaceCard
-                        title="Assigned-asset-first sign in"
-                        body="Select returning assets and resolve the final outcome."
-                      />
                       <AssetSelectionList
                         assets={workspace.signInAssets}
                         selectedIds={selectedSignInAssetIds}
@@ -1130,10 +1122,6 @@ export default function CheckOutInPage() {
 
             {activeTab === "returns" && (
               <div className="space-y-4">
-                <WorkspaceCard
-                  title="Read-only returns monitoring surface"
-                  body="Monitor return-request progress and current status."
-                />
                 <div className="grid gap-4 lg:grid-cols-3">
                   <MetricPanel label="Pending" value={String(returnSummary.pending)} />
                   <MetricPanel label="Accepted" value={String(returnSummary.accepted)} />
@@ -1178,14 +1166,6 @@ export default function CheckOutInPage() {
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
                   <div className="space-y-4">
-                    <WorkspaceCard
-                      title="Dedicated permanent-assignment workspace"
-                      body={
-                        permanentMode === "direct_issue"
-                          ? "Issue available assets directly to a permanent holder."
-                          : "Move assigned assets to a different long-term holder."
-                      }
-                    />
                     <AssetSelectionList
                       assets={permanentMode === "direct_issue" ? workspace.signOutAssets : workspace.signInAssets}
                       selectedIds={permanentMode === "direct_issue" ? selectedPermanentIssueAssetIds : selectedPermanentReassignAssetIds}
@@ -1280,14 +1260,6 @@ export default function CheckOutInPage() {
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
                   <div className="space-y-4">
-                    <WorkspaceCard
-                      title="Site resting-state workspace"
-                      body={
-                        stationedMode === "temporary_use"
-                          ? "Assign stationed assets to a responsible user for temporary use."
-                          : "Return traveling assets to a final site and resolve the outcome."
-                      }
-                    />
                     <AssetSelectionList
                       assets={stationedMode === "temporary_use" ? workspace.stationedReadyAssets : workspace.stationedActiveAssets}
                       selectedIds={stationedMode === "temporary_use" ? selectedStationedCheckoutAssetIds : selectedStationedCheckInAssetIds}
@@ -1403,15 +1375,6 @@ export default function CheckOutInPage() {
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
                   <div className="space-y-4">
-                    <WorkspaceCard
-                      title="Saved-kit deployment workspace"
-                      body={
-                        sundayKitsMode === "deploy"
-                          ? "Deploy one saved Sunday kit at a time from the live kits list into a responsible-user workflow."
-                          : "Resolve pending Sunday kit return items individually where the live deployment-item ledger exists, with count-based fallback only for older or incomplete backend surfaces."
-                      }
-                    />
-
                     {sundayKitsMode === "deploy" ? (
                       <div className="space-y-3">
                         {workspace.sundayKits.length === 0 ? (
@@ -1663,10 +1626,6 @@ export default function CheckOutInPage() {
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
                   <div className="space-y-4">
-                    <WorkspaceCard
-                      title="Bulk QR in-tab operations"
-                      body="Scan or import QR codes, resolve the batch, then run one action."
-                    />
                     <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
@@ -2033,16 +1992,6 @@ function ReturnMonitorCard({ row }: { row: ReturnRequestMonitorRecord }) {
         </div>
         <span className={cn("inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]", statusClass)}>{row.status}</span>
       </div>
-    </div>
-  );
-}
-
-function WorkspaceCard({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="app-panel p-4">
-      <div className="app-kicker">Workspace intent</div>
-      <div className="mt-2 font-display text-2xl text-foreground glow-soft">{title}</div>
-      <p className="mt-3 text-sm text-muted-foreground">{body}</p>
     </div>
   );
 }
