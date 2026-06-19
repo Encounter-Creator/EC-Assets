@@ -1491,10 +1491,6 @@ export default function SettingsPage() {
                 <ArrowLeft size={15} className="shrink-0 text-primary/80" />
                 Back
               </button>
-              <div className="mt-4 rounded-[1rem] border border-primary/12 bg-background/45 px-4 py-3">
-                <div className="font-display text-2xl uppercase tracking-[0.18em] text-primary glow">Settings</div>
-                <div className="mt-2 text-sm text-muted-foreground">Profile, users, locations, reports, and system config.</div>
-              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-3">
