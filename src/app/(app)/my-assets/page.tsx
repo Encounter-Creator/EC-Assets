@@ -519,10 +519,10 @@ export default function MyAssetsPage() {
                               {loadingHandoverRecipients ? "Loading recipients..." : "Choose recipient"}
                             </option>
                             {handoverRecipients.map((recipient) => (
-                              <option key={recipient.id} value={recipient.id} className="bg-[hsl(var(--card))] text-foreground">
-                                {recipient.fullName} | {recipient.homeBase ?? "No home base"} | {recipient.role}
-                              </option>
-                            ))}
+                            <option key={recipient.id} value={recipient.id} className="bg-[hsl(var(--card))] text-foreground">
+                                {recipient.fullName} | {recipient.homeBase ?? "Unassigned"} | {recipient.role}
+                            </option>
+                          ))}
                           </select>
                         </div>
                       </label>

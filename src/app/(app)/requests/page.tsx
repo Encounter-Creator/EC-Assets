@@ -741,9 +741,7 @@ export default function RequestsPage() {
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
                   <div className="space-y-4 rounded-[1.35rem] border border-primary/12 bg-card/20 p-4">
                     <StepCard
-                      step="Step 1"
                       title="Browse and build one shared asset basket"
-                      body="Select the items you want to request."
                     />
 
                     <div className="matrix-field flex h-12 items-center gap-2 rounded-[1.15rem] px-4">
@@ -805,9 +803,7 @@ export default function RequestsPage() {
 
                   <div className="space-y-4 rounded-[1.35rem] border border-primary/12 bg-card/20 p-4">
                     <StepCard
-                      step="Step 2"
                       title="Shared basket details and live submit"
-                      body="Confirm source, timing, and request details."
                     />
 
                     <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
@@ -871,9 +867,7 @@ export default function RequestsPage() {
             {activeTab === "special" && (
               <div className="space-y-4">
                 <StepCard
-                  step="Step 1"
                   title="Choose special request type and target asset"
-                  body="Pick the workflow and target asset."
                 />
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
@@ -955,9 +949,7 @@ export default function RequestsPage() {
             {activeTab === "returns" && (
               <div className="space-y-4">
                 <StepCard
-                  step="Step 1"
                   title="Build one shared return request"
-                  body="Select assigned items and set the return details."
                 />
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
@@ -1137,19 +1129,13 @@ function TabButton({
 }
 
 function StepCard({
-  step,
   title,
-  body,
 }: {
-  step: string;
   title: string;
-  body?: string;
 }) {
   return (
     <div className="app-panel p-4">
-      <div className="app-kicker">{step}</div>
       <div className="mt-2 font-display text-2xl text-foreground glow-soft">{title}</div>
-      {body ? <p className="mt-3 text-sm text-muted-foreground">{body}</p> : null}
     </div>
   );
 }

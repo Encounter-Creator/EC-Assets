@@ -167,7 +167,7 @@ export default function SettingsPage() {
     () =>
       workspace.locations.find((location) => location.id === assignedLocationId)?.name ??
       workspace.locations.find((location) => location.id === assetManagerLocationId)?.name ??
-      "No home base assigned",
+      "Unassigned",
     [assignedLocationId, assetManagerLocationId, workspace.locations],
   );
   const profileNameParts = useMemo(() => (profileName || "").trim().split(/\s+/).filter(Boolean), [profileName]);
@@ -1652,7 +1652,7 @@ export default function SettingsPage() {
                           value={newUserLocationId}
                           onChange={setNewUserLocationId}
                           options={[
-                            { label: "No home base", value: "" },
+                            { label: "Unassigned", value: "" },
                             ...workspace.locations.map((location) => ({ label: location.name, value: location.id })),
                           ]}
                         />
@@ -1688,7 +1688,7 @@ export default function SettingsPage() {
                     <FieldCard label="Locked" value={String(visibleUsers.filter((entry) => entry.locked).length)} />
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    <TextField label="Search users" value={userSearch} onChange={setUserSearch} placeholder="Name, email, role, home base..." />
+                    <TextField label="Search users" value={userSearch} onChange={setUserSearch} placeholder="Name, email, role, location..." />
                     <SelectTextField
                       label="Role filter"
                       value={userRoleFilter}
@@ -1736,7 +1736,7 @@ export default function SettingsPage() {
                           >
                             <span className="text-sm font-medium">{entry.full_name}</span>
                             <span className="text-sm text-muted-foreground">
-                              {entry.role} | {entry.home_base ?? "No home base"} | {entry.locked ? "Locked" : entry.approved ? "Approved" : "Pending approval"}
+                              {entry.role} | {entry.home_base ?? "Unassigned"} | {entry.locked ? "Locked" : entry.approved ? "Approved" : "Pending approval"}
                             </span>
                           </button>
                         ))
@@ -2021,7 +2021,7 @@ export default function SettingsPage() {
                         >
                           <div className="text-sm font-medium text-foreground">{entry.name}</div>
                           <div className="mt-1 text-sm text-muted-foreground">
-                            {entry.home_base ?? "No home base"} | {entry.item_count} item{entry.item_count === 1 ? "" : "s"} | {entry.active ? "Active" : "Inactive"}
+                            {entry.home_base ?? "Unassigned"} | {entry.item_count} item{entry.item_count === 1 ? "" : "s"} | {entry.active ? "Active" : "Inactive"}
                           </div>
                         </button>
                         <button

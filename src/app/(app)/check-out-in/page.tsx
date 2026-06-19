@@ -1395,7 +1395,6 @@ export default function CheckOutInPage() {
                                   <div className="min-w-0">
                                     <div className="font-display text-xl text-foreground glow-soft">{kit.name}</div>
                                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                                      <span>{kit.home_base ?? "No home base"}</span>
                                       <span>{kit.item_count} item{kit.item_count === 1 ? "" : "s"}</span>
                                     </div>
                                   </div>
@@ -1887,7 +1886,7 @@ function SundayKitSummaryCard({ kit }: { kit: SundayKitRecord | null }) {
       {kit ? (
         <div className="mt-3 space-y-2">
           <div className="font-display text-xl text-foreground glow-soft">{kit.name}</div>
-          <div className="text-sm text-muted-foreground">{kit.home_base ?? "No home base"} | {kit.item_count} item{kit.item_count === 1 ? "" : "s"}</div>
+          <div className="text-sm text-muted-foreground">{kit.item_count} item{kit.item_count === 1 ? "" : "s"}</div>
         </div>
       ) : (
         <div className="mt-3 rounded-[1rem] border border-dashed border-primary/14 px-4 py-8 text-center text-sm text-muted-foreground">
