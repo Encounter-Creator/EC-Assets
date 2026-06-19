@@ -44,9 +44,10 @@ export function AppShell({
   const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [locationScopeOpen, setLocationScopeOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const { damageLockCase, isDamageLocked, profileName, roles, user } = useAuth();
-  const { activeLocationId, locations, selectedLocationId, setSelectedLocationId } = useLocationScope();
+  const { activeLocationId, canSelectAllLocations, locations, selectedLocationId, selectedLocationName, setSelectedLocationId } = useLocationScope();
   const notificationRefreshInFlightRef = useRef(false);
   const lastNotificationRefreshAtRef = useRef(0);
   const visibleNavItems = navItems.filter((item) => item.show(roles));
@@ -264,7 +265,67 @@ export function AppShell({
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setNotificationsOpen((current) => !current)}
+                  onClick={() => {
+                    setNotificationsOpen(false);
+                    setLocationScopeOpen((current) => !current);
+                  }}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-primary/18 bg-card/70 text-sm text-muted-foreground transition-colors hover:bg-primary/8 hover:text-foreground sm:w-auto sm:justify-start sm:gap-2 sm:px-2.5"
+                  aria-label={`Open location scope: ${selectedLocationName}`}
+                >
+                  <MapPin size={15} className="shrink-0 text-primary/80" />
+                  <span className="hidden max-w-[10rem] truncate sm:inline">{selectedLocationName}</span>
+                </button>
+                {locationScopeOpen && (
+                  <div className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[18rem] max-w-[88vw] rounded-[1.4rem] border border-primary/16 bg-background/96 p-3 shadow-[var(--shadow-strong)] backdrop-blur-xl">
+                    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Location scope</div>
+                    <div className="mt-1 truncate text-sm text-foreground">{selectedLocationName}</div>
+                    {canSelectAllLocations && locations.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedLocationId("all");
+                            setLocationScopeOpen(false);
+                            setNotificationsOpen(false);
+                          }}
+                          className={cn(
+                            "w-full rounded-full border px-3 py-2 text-left text-sm transition-colors",
+                            selectedLocationId === "all" ? "border-primary/30 bg-primary/12 text-primary" : "border-primary/12 text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          All locations
+                        </button>
+                        {locations.slice(0, 5).map((location) => (
+                          <button
+                            key={location.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedLocationId(location.id);
+                              setLocationScopeOpen(false);
+                              setNotificationsOpen(false);
+                            }}
+                            className={cn(
+                              "w-full rounded-full border px-3 py-2 text-left text-sm transition-colors",
+                              selectedLocationId === location.id ? "border-primary/30 bg-primary/12 text-primary" : "border-primary/12 text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            {location.name}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-xs text-muted-foreground">Locked to assigned location by role.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLocationScopeOpen(false);
+                    setNotificationsOpen((current) => !current);
+                  }}
                   className="relative rounded-full border border-primary/18 bg-card/70 p-2 text-muted-foreground"
                   aria-label="Open notifications"
                 >
@@ -412,14 +473,7 @@ export function AppShell({
                 <span>More</span>
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={() => setSelectedLocationId(selectedLocationId === "all" ? locations[0]?.id ?? "all" : "all")}
-                className="flex min-h-[4rem] flex-col items-center justify-center gap-1 rounded-xl px-1 pb-1.5 pt-2 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-primary/8 hover:text-foreground"
-              >
-                <MapPin size={17} />
-                <span>Scope</span>
-              </button>
+              <div aria-hidden="true" className="min-h-[4rem]" />
             )}
           </div>
         </nav>
@@ -438,14 +492,13 @@ function Sidebar({
   onNavigate?: () => void;
 }) {
   const { signOut } = useAuth();
-  const { canSelectAllLocations, isLocationLocked, locations, selectedLocationId, selectedLocationName, setSelectedLocationId } = useLocationScope();
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.8rem] border border-primary/16 bg-card/60 text-sidebar-foreground shadow-[var(--shadow-soft)] backdrop-blur-sm">
       <div className="border-b border-primary/12 p-4">
         <Brand />
       </div>
-      <nav className="flex-1 space-y-2 overflow-y-auto p-3">
+      <nav className="flex-1 space-y-2 p-3">
         {navItems.map((item) => {
           const active = pathname === item.href;
           return (
@@ -467,42 +520,6 @@ function Sidebar({
           );
         })}
       </nav>
-      <div className="shrink-0 px-3 pb-3">
-        <div className="rounded-[1.2rem] border border-primary/18 bg-background/50 px-3 py-3">
-          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Location scope</div>
-          <div className="mt-1 truncate text-sm text-foreground">{selectedLocationName}</div>
-          {canSelectAllLocations && locations.length > 0 && (
-            <div className="mt-3 flex flex-nowrap gap-2 overflow-x-auto pb-1">
-              <button
-                type="button"
-                onClick={() => setSelectedLocationId("all")}
-                className={cn(
-                  "shrink-0 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
-                  selectedLocationId === "all" ? "border-primary/30 bg-primary/12 text-primary" : "border-primary/12 text-muted-foreground hover:text-foreground",
-                )}
-              >
-                All
-              </button>
-              {locations.slice(0, 3).map((location) => (
-                  <button
-                    key={location.id}
-                    type="button"
-                    onClick={() => setSelectedLocationId(location.id)}
-                    className={cn(
-                    "shrink-0 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
-                    selectedLocationId === location.id ? "border-primary/30 bg-primary/12 text-primary" : "border-primary/12 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {location.name}
-                </button>
-              ))}
-            </div>
-          )}
-          {isLocationLocked && (
-            <div className="mt-2 text-xs text-muted-foreground">Locked to assigned location by role.</div>
-          )}
-        </div>
-      </div>
       <div className="px-3 pb-3">
         <button
           type="button"
