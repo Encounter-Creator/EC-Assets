@@ -441,11 +441,11 @@ function Sidebar({
   const { canSelectAllLocations, isLocationLocked, locations, selectedLocationId, selectedLocationName, setSelectedLocationId } = useLocationScope();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded-[1.8rem] border border-primary/16 bg-card/60 text-sidebar-foreground shadow-[var(--shadow-soft)] backdrop-blur-sm">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.8rem] border border-primary/16 bg-card/60 text-sidebar-foreground shadow-[var(--shadow-soft)] backdrop-blur-sm">
       <div className="border-b border-primary/12 p-4">
         <Brand />
       </div>
-      <nav className="flex-1 space-y-2 p-3">
+      <nav className="flex-1 space-y-2 overflow-y-auto p-3">
         {navItems.map((item) => {
           const active = pathname === item.href;
           return (
@@ -467,29 +467,29 @@ function Sidebar({
           );
         })}
       </nav>
-      <div className="px-3 pb-3">
-        <div className="rounded-[1.2rem] border border-primary/18 bg-background/50 px-4 py-3">
+      <div className="shrink-0 px-3 pb-3">
+        <div className="rounded-[1.2rem] border border-primary/18 bg-background/50 px-3 py-3">
           <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Location scope</div>
-          <div className="mt-2 text-sm text-foreground">{selectedLocationName}</div>
+          <div className="mt-1 truncate text-sm text-foreground">{selectedLocationName}</div>
           {canSelectAllLocations && locations.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-nowrap gap-2 overflow-x-auto pb-1">
               <button
                 type="button"
                 onClick={() => setSelectedLocationId("all")}
                 className={cn(
-                  "rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
+                  "shrink-0 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
                   selectedLocationId === "all" ? "border-primary/30 bg-primary/12 text-primary" : "border-primary/12 text-muted-foreground hover:text-foreground",
                 )}
               >
                 All
               </button>
               {locations.slice(0, 3).map((location) => (
-                <button
-                  key={location.id}
-                  type="button"
-                  onClick={() => setSelectedLocationId(location.id)}
-                  className={cn(
-                    "rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
+                  <button
+                    key={location.id}
+                    type="button"
+                    onClick={() => setSelectedLocationId(location.id)}
+                    className={cn(
+                    "shrink-0 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
                     selectedLocationId === location.id ? "border-primary/30 bg-primary/12 text-primary" : "border-primary/12 text-muted-foreground hover:text-foreground",
                   )}
                 >
