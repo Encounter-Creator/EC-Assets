@@ -214,7 +214,7 @@ export function AppShell({
 
   return (
     <div className="app-mobile-shell relative isolate flex min-h-screen text-foreground">
-      <MatrixRain className="opacity-80 mix-blend-screen" />
+      <MatrixRain interactive className="opacity-80 mix-blend-screen" />
       <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.08),transparent_28%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.06),transparent_24%)]" />
       <aside className="sticky top-4 ml-4 mr-3 mt-4 hidden h-[calc(100dvh-2rem)] w-[260px] shrink-0 md:flex">
         <Sidebar pathname={pathname} navItems={visibleNavItems} />

@@ -27,7 +27,7 @@ export function MatrixRain({
     let drops = Array(columns)
       .fill(1)
       .map(() => Math.random() * -50);
-    const pointer = { x: -9999, active: false };
+    const pointer = { x: -9999, y: -9999, active: false };
 
     const chars = "01";
 
@@ -43,11 +43,13 @@ export function MatrixRain({
     const move = (event: PointerEvent) => {
       if (!interactive) return;
       pointer.x = event.clientX;
+      pointer.y = event.clientY;
       pointer.active = true;
     };
 
     const leave = () => {
       pointer.x = -9999;
+      pointer.y = -9999;
       pointer.active = false;
     };
 
@@ -77,7 +79,9 @@ export function MatrixRain({
         let speed = 1;
 
         if (interactive && pointer.active) {
-          const distance = Math.abs(x - pointer.x);
+          const dx = x - pointer.x;
+          const dy = y - pointer.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
           if (distance < pauseRadius) {
             speed = Math.max(0, (distance - fullStopRadius) / (pauseRadius - fullStopRadius));
           }
