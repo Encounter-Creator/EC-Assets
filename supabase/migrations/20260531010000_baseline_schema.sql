@@ -575,6 +575,7 @@ declare
   v_expected_count integer;
   v_updated_count integer;
   v_location_id uuid;
+  v_location_count integer;
 begin
   if auth.uid() is null then
     raise exception 'Not authenticated';
@@ -590,10 +591,22 @@ begin
 
   v_expected_count := array_length(p_asset_ids, 1);
 
-  select min(a.current_location_id)
-  into v_location_id
+  select count(distinct a.current_location_id)
+  into v_location_count
   from public.assets a
   where a.id = any (p_asset_ids);
+
+  if v_location_count > 1 then
+    raise exception 'Selected assets must share one source location';
+  end if;
+
+  select a.current_location_id
+  into v_location_id
+  from public.assets a
+  where a.id = any (p_asset_ids)
+    and a.current_location_id is not null
+  order by a.current_location_id
+  limit 1;
 
   update public.assets
   set
