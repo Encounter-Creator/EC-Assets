@@ -45,7 +45,7 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const { damageLockCase, isDamageLocked, profileName, roles, signOut, user } = useAuth();
+  const { damageLockCase, isDamageLocked, profileName, roles, user } = useAuth();
   const { activeLocationId, locations, selectedLocationId, setSelectedLocationId } = useLocationScope();
   const notificationRefreshInFlightRef = useRef(false);
   const lastNotificationRefreshAtRef = useRef(0);
