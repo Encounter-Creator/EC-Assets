@@ -1,7 +1,8 @@
 "use client";
 
-import { Archive, FileText, MapPin, Package, QrCode, RefreshCcw, Settings2, Shield, UserRound, Users, Wrench } from "lucide-react";
+import { ArrowLeft, Archive, FileText, MapPin, Package, QrCode, RefreshCcw, Settings2, Shield, UserRound, Users, Wrench } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -39,7 +40,6 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 import { AssetIntakePanel } from "./asset-intake-panel";
-import { SectionShell } from "../layout";
 
 type SettingsTab =
   | "profile"
@@ -69,6 +69,7 @@ const tabs = [
 ] as const;
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { isAdmin, isAssetManager, profileName, roles, isConfigured, user, assignedLocationId, assetManagerLocationId } = useAuth();
   const [workspace, setWorkspace] = useState<SettingsWorkspaceData>(() => ({
     ...getFallbackSettingsWorkspace(),
@@ -1477,8 +1478,49 @@ export default function SettingsPage() {
   };
 
   return (
-    <SectionShell title="Settings" kicker="Profile + role-aware operational tabs">
-      <div className="space-y-4 sm:space-y-6">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(44,84,61,0.2),_transparent_40%),_linear-gradient(180deg,_hsl(var(--background)),_hsl(var(--background)))] text-foreground">
+      <div className="flex min-h-screen flex-col xl:flex-row">
+        <aside className="border-b border-primary/12 bg-[hsl(var(--sidebar-background))]/92 backdrop-blur-xl xl:sticky xl:top-0 xl:h-screen xl:w-[19rem] xl:border-b-0 xl:border-r">
+          <div className="flex h-full flex-col">
+            <div className="border-b border-primary/12 p-4">
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard")}
+                className="inline-flex items-center gap-2 rounded-full border border-primary/18 bg-card/70 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-primary/8 hover:text-foreground"
+              >
+                <ArrowLeft size={15} className="shrink-0 text-primary/80" />
+                Back
+              </button>
+              <div className="mt-4 rounded-[1rem] border border-primary/12 bg-background/45 px-4 py-3">
+                <div className="font-display text-2xl uppercase tracking-[0.18em] text-primary glow">Settings</div>
+                <div className="mt-2 text-sm text-muted-foreground">Profile, users, locations, reports, and system config.</div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3">
+              <div className="px-1 pb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-primary/72">Sections</div>
+              <div className="space-y-2">
+                {visibleTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-[1.1rem] border px-4 py-3 text-left text-sm font-medium transition-colors",
+                      activeTab === tab.id ? "border-primary/24 bg-primary/12 text-primary" : "border-transparent text-muted-foreground hover:bg-primary/6 hover:text-foreground",
+                    )}
+                  >
+                    <tab.icon size={16} className="shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          <div className="space-y-4 sm:space-y-6 px-4 py-4 sm:px-6 sm:py-6">
         <section className="space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -1527,34 +1569,10 @@ export default function SettingsPage() {
           )}
         </section>
 
-        <section className="app-panel overflow-hidden">
-          <div className="grid gap-0 xl:grid-cols-[minmax(0,0.36fr)_minmax(0,0.64fr)]">
-            <div className="border-b border-primary/12 xl:border-b-0 xl:border-r">
-              <div className="p-4 sm:p-5">
-                <div className="app-kicker">Tabs</div>
-              </div>
-
-              <div className="space-y-2 px-4 pb-4 sm:px-5 sm:pb-5">
-                {visibleTabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActiveTab(tab.id)}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-[1.1rem] border px-4 py-3 text-left text-sm font-medium transition-colors",
-                      activeTab === tab.id ? "border-primary/24 bg-primary/12 text-primary" : "border-transparent text-muted-foreground hover:bg-primary/6 hover:text-foreground",
-                    )}
-                  >
-                    <tab.icon size={16} className="shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">{tab.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
+          <section className="app-panel overflow-hidden">
             <div className="p-4 sm:p-5">
-              {activeTab === "profile" && (
-                <div className="space-y-4">
+                {activeTab === "profile" && (
+                  <div className="space-y-4">
                   <div className="app-kicker">Profile</div>
                   <div className="font-display text-3xl text-foreground glow-soft">Personal operator profile</div>
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -2488,10 +2506,11 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
-          </div>
-        </section>
+          </section>
       </div>
-    </SectionShell>
+        </main>
+      </div>
+    </div>
   );
 }
 
