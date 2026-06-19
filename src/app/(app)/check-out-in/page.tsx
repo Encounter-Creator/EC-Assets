@@ -96,8 +96,8 @@ export default function CheckOutInPage() {
   const requestedTab: OpsTab | null = isOpsTab(requestedTabValue) ? requestedTabValue : null;
   const requestedMode = searchParams.get("mode");
   const requestedAssetId = searchParams.get("assetId");
-  const { isAdmin, isAssetManager, isConfigured } = useAuth();
-  const { activeLocationId } = useLocationScope();
+  const { isAdmin, isAssetManager, isConfigured, assignedLocationId, assetManagerLocationId } = useAuth();
+  const { activeLocationId, selectedLocationName } = useLocationScope();
   const [workspace, setWorkspace] = useState<CheckOperationsWorkspaceData>(() => ({
     ...getFallbackCheckOperationsWorkspace(),
     warnings: [],
@@ -341,8 +341,11 @@ export default function CheckOutInPage() {
   const resolvedStationedRecipientId = selectedStationedRecipientId || workspace.recipients[0]?.id || "";
   const resolvedStationedLocationId = selectedStationedLocationId || activeLocationId || "";
   const resolvedQrRecipientId = selectedQrRecipientId || workspace.recipients[0]?.id || "";
-  const resolvedFinalLocationId = selectedFinalLocationId || activeLocationId || "";
-  const resolvedQrLocationId = selectedQrLocationId || activeLocationId || "";
+  const lockedSignInLocationId = activeLocationId || assetManagerLocationId || assignedLocationId || "";
+  const resolvedFinalLocationId = isAdmin ? selectedFinalLocationId || lockedSignInLocationId : lockedSignInLocationId;
+  const resolvedQrLocationId = isAdmin ? selectedQrLocationId || lockedSignInLocationId : lockedSignInLocationId;
+  const lockedSignInLocationName =
+    workspace.locations.find((location) => location.id === lockedSignInLocationId)?.name ?? selectedLocationName ?? "Assigned home base";
   const resolvedSundayKitId = selectedSundayKitId || workspace.sundayKits[0]?.id || "";
   const resolvedSundayKitRecipientId = selectedSundayKitRecipientId || workspace.recipients[0]?.id || "";
   const resolvedSundayKitLocationId = selectedSundayKitLocationId || workspace.locations[0]?.id || "";
@@ -1125,16 +1128,24 @@ export default function CheckOutInPage() {
                         items={selectedSignInAssets}
                         emptyBody="No assets selected yet."
                       />
-                      <SelectField
-                        label="Final location"
-                        value={resolvedFinalLocationId}
-                        onChange={setSelectedFinalLocationId}
-                        options={workspace.locations.map((location) => ({
-                          label: location.name,
-                          value: location.id,
-                        }))}
-                        placeholder="Select a final sign-in location"
-                      />
+                      {isAdmin ? (
+                        <SelectField
+                          label="Final location"
+                          value={resolvedFinalLocationId}
+                          onChange={setSelectedFinalLocationId}
+                          options={workspace.locations.map((location) => ({
+                            label: location.name,
+                            value: location.id,
+                          }))}
+                          placeholder="Select a final sign-in location"
+                        />
+                      ) : (
+                        <LockedLocationField
+                          label="Final location"
+                          value={lockedSignInLocationName}
+                          description="Asset managers sign back into their assigned home base."
+                        />
+                      )}
                       <SelectField
                         label="Outcome"
                         value={signInOutcome}
@@ -1782,16 +1793,24 @@ export default function CheckOutInPage() {
                       />
                     ) : (
                       <>
-                        <SelectField
-                          label="Final location"
-                          value={resolvedQrLocationId}
-                          onChange={setSelectedQrLocationId}
-                          options={workspace.locations.map((location) => ({
-                            label: location.name,
-                            value: location.id,
-                          }))}
-                          placeholder="Select a final sign-in location"
-                        />
+                        {isAdmin ? (
+                          <SelectField
+                            label="Final location"
+                            value={resolvedQrLocationId}
+                            onChange={setSelectedQrLocationId}
+                            options={workspace.locations.map((location) => ({
+                              label: location.name,
+                              value: location.id,
+                            }))}
+                            placeholder="Select a final sign-in location"
+                          />
+                        ) : (
+                          <LockedLocationField
+                            label="Final location"
+                            value={lockedSignInLocationName}
+                            description="Asset managers sign back into their assigned home base."
+                          />
+                        )}
                         <SelectField
                           label="Outcome"
                           value={qrSignInOutcome}
@@ -1994,6 +2013,26 @@ function SelectField({
         </select>
       </div>
     </label>
+  );
+}
+
+function LockedLocationField({
+  label,
+  value,
+  description,
+}: {
+  label: string;
+  value: string;
+  description: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary/72">{label}</span>
+      <div className="rounded-[1.35rem] border border-primary/14 bg-card/35 px-4 py-3">
+        <div className="h-11 flex items-center text-sm text-foreground">{value || "No location assigned"}</div>
+        <div className="pb-1 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{description}</div>
+      </div>
+    </div>
   );
 }
 
