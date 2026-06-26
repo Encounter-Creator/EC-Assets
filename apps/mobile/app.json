@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Assets App",
+    "slug": "ec-assets",
+    "scheme": "assetsapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "icon": "../../public/icon-512.png",
+    "splash": {
+      "backgroundColor": "#06110b",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.encountercreator.ecassets"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#06110b"
+      },
+      "package": "com.encountercreator.ecassets"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d9bc80ab-9dc8-43e8-ab99-712ad1a04e34"
+      }
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ]
+  }
+}
