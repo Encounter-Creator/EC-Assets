@@ -18,6 +18,14 @@
 /.next/
 /out/
 
+# expo
+/apps/mobile/node_modules/
+/apps/mobile/.expo/
+/apps/mobile/.expo-shared/
+/apps/mobile/android/
+/apps/mobile/ios/
+/apps/mobile/dist/
+
 # production
 /build
 
