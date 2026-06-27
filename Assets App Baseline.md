@@ -114,20 +114,18 @@ Public routes:
 - Uses live, mixed, or fallback data
 
 ### Inventory
-- Grouped catalog first, drill into physical units
-- Filters: `Search`, `Location`, `Department`, `Status`, `Availability`
-- Grouped cards: name/type, counts for Available/Assigned/Traveling/Damaged, location spread
-- Unit detail: Tag, Name, Serial, Status, Location, Department, Holder
-- Inline editing allowed for `Name`, `Tag`, `Department / Team` (admin and asset-manager only)
-- Asset detail routes into compatible request, check-out/in, return, reassignment, damage-review workflows
-- Recent asset history preview on selected unit
+- Single full-width accordion list: click group header to expand/collapse, click item inside to open profile sheet
+- Filters: `Search`, `Department`, `Status`, `Availability`; group header shows compact counts (Available/Assigned/Traveling/Damaged)
+- Asset profile: right-side slide-over sheet with edit form (Name, Tag, Department/Team — admin/asset-manager only), status badge, recent history
+- URL state: `?assetId=xxx` auto-expands the containing group and opens the profile sheet
+- No drill-in button (ExternalLink removed); accordion replaces the old two-panel layout
 
 ### Check-out/In
 Manager/admin only. Six tabs:
-- `Standard` (default): two-mode Sign Out / Sign In; multi-item; outcomes: `Available` or `Damaged`
-- `Permanent`: direct issue and reassignment; explicit return-location sign-in
-- `Stationed`: resting-state model; temporary use moves to `Traveling`; sign-in outcomes: `Stationed`, `Available`, `Damaged`
-- `Sunday Kits`: kit-level deployment with item-level return resolution; saved kit membership from `Settings > Kits` when available
+- `Standard` (default): two-mode Sign Out / Sign In; multi-item; **live search bar** above asset list; outcomes: `Available` or `Damaged`
+- `Permanent`: direct issue and reassignment; explicit return-location sign-in; **live search bar** above asset list
+- `Stationed`: resting-state model; temporary use moves to `Traveling`; sign-in outcomes: `Stationed`, `Available`, `Damaged`; **live search bar** above asset list
+- `Sunday Kits` deploy: shows actual kit members (loaded from `kit_members` table); per-item toggle (deselect = skip); per-item asset swap via dropdown picker (excludes items already assigned to other slots); deploy uses `runStandardSignOut` for selected items with kit name in note; falls back to `deploy_sunday_kit` RPC when kit members can't be loaded. Returns: item-level resolution as before.
 - `Returns`: read-only monitoring surface (decisions happen in `Approvals > Returns`)
 - `QR Scan`: camera-assisted capture (requires `BarcodeDetector` + camera permissions); manual batch entry and `.txt`/`.csv` batch-file import as fallbacks
 
@@ -349,3 +347,6 @@ This section is historical context. It is not the active spec.
 - Session 40: Settings Kits asset-backed membership editor — `kit_members` migration; Sunday Kits deployment uses saved membership
 - Session 41: QR camera-assisted scan — `BarcodeDetector` capture + unique-code dedup
 - Post-baseline: Matrix rain pointer tracking improvements; asset manager sign-in location locking; default location scope fix
+- Session 42: WorkspaceLoader (matrix rain + decypher animation) wired into all 7 pages
+- Session 43: Supabase migration — full data import from old project (zkgdwwg) to new (qeeleroh): 605 assets, 143 profiles, 145 auth users, 37 departments, 19 kits, 81 kit_members, 5 locations remapped
+- Session 44: Inventory redesign — accordion grouped list, profile sheet slide-over; Check-out/In search bars on Standard/Permanent/Stationed; Sunday Kits deploy item-level selection + swap picker (`KitMemberRecord`, `loadKitMembers` added to check-operations.ts)
