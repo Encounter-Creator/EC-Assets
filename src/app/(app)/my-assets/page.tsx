@@ -24,8 +24,6 @@ import {
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-import { WorkspaceLoader } from "@/components/workspace-loader";
-
 import { SectionShell } from "../layout";
 
 const damageBadgeClass: Record<DamageRecord["status"], string> = {
@@ -455,9 +453,7 @@ export default function MyAssetsPage() {
     }
   };
 
-  if (!workspaceReady) {
-    return <WorkspaceLoader subtitle="Loading your assets" />;
-  }
+
 
   return (
     <SectionShell title="My Assets" kicker="Assigned + Pending + Damage">

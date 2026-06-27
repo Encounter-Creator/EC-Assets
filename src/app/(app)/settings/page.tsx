@@ -40,8 +40,6 @@ import { generateQrExportPdf, loadQrExportAssets, type QrExportAsset } from "@/l
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-import { WorkspaceLoader } from "@/components/workspace-loader";
-
 import { AssetIntakePanel } from "./asset-intake-panel";
 
 type SettingsTab =
@@ -1494,9 +1492,7 @@ export default function SettingsPage() {
     }
   };
 
-  if (!workspaceReady) {
-    return <WorkspaceLoader subtitle="Loading settings" />;
-  }
+
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(44,84,61,0.2),_transparent_40%),_linear-gradient(180deg,_hsl(var(--background)),_hsl(var(--background)))] text-foreground">

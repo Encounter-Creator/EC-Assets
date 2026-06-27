@@ -32,8 +32,6 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 
-import { WorkspaceLoader } from "@/components/workspace-loader";
-
 import { SectionShell } from "../layout";
 
 type OpsTab = "standard" | "permanent" | "stationed" | "sunday_kits" | "returns" | "qr_scan";
@@ -1054,9 +1052,7 @@ export default function CheckOutInPage() {
     );
   }
 
-  if (!workspaceReady) {
-    return <WorkspaceLoader subtitle="Loading operations" />;
-  }
+
 
   return (
     <SectionShell title="Check-out/In" kicker="Standard + Permanent + Stationed + Kits">

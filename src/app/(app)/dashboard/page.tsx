@@ -11,8 +11,6 @@ import { getFallbackDashboardWorkspace, loadDashboardWorkspace, type DashboardCa
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-import { WorkspaceLoader } from "@/components/workspace-loader";
-
 import { SectionShell } from "../layout";
 
 type FeedbackState = {
@@ -169,9 +167,7 @@ export default function DashboardPage() {
     }
   };
 
-  if (!workspaceReady) {
-    return <WorkspaceLoader subtitle="Loading dashboard" />;
-  }
+
 
   return (
     <SectionShell title="Operations overview" kicker="Dashboard">

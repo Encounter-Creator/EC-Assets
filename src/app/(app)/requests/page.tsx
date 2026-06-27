@@ -27,8 +27,6 @@ import { matchesSearchQuery } from "@/lib/search";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-import { WorkspaceLoader } from "@/components/workspace-loader";
-
 import { SectionShell } from "../layout";
 
 const historyBadgeClass: Record<RequestHistoryItem["status"], string> = {
@@ -682,9 +680,7 @@ export default function RequestsPage() {
     );
   }
 
-  if (!workspaceReady) {
-    return <WorkspaceLoader subtitle="Loading requests" />;
-  }
+
 
   return (
     <SectionShell title="Requests" kicker="Asset + Special + Returns + History">

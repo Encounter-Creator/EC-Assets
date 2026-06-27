@@ -24,8 +24,6 @@ import { matchesSearchQuery } from "@/lib/search";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-import { WorkspaceLoader } from "@/components/workspace-loader";
-
 import { SectionShell } from "../layout";
 
 const tabMeta = [
@@ -470,9 +468,7 @@ export default function ApprovalsPage() {
     );
   }
 
-  if (!workspaceReady) {
-    return <WorkspaceLoader subtitle="Loading approval queues" />;
-  }
+
 
   return (
     <SectionShell title="Approvals" kicker="Queue + review panel">

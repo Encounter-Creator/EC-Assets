@@ -12,8 +12,6 @@ import { matchesSearchQuery } from "@/lib/search";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-import { WorkspaceLoader } from "@/components/workspace-loader";
-
 import { SectionShell } from "../layout";
 
 const fallbackWorkspace: InventoryWorkspaceData = {
@@ -322,9 +320,7 @@ export default function InventoryPage() {
     }
   };
 
-  if (!workspaceReady) {
-    return <WorkspaceLoader subtitle="Loading inventory" />;
-  }
+
 
   return (
     <SectionShell title="Inventory" kicker="Grouped catalog">
