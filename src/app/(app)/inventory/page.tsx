@@ -40,7 +40,7 @@ export default function InventoryPage() {
   }, [loading, workspaceReady]);
   const [query, setQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<AssetStatus | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<AssetStatus | "all">("available");
   const [availabilityFilter, setAvailabilityFilter] = useState<"all" | "available_only" | "actionable">("all");
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -437,17 +437,12 @@ export default function InventoryPage() {
                         onClick={() => setSelectedGroupKey(isExpanded ? null : group.key)}
                         className="w-full px-5 py-4 text-left transition-colors hover:bg-primary/4"
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="font-display text-xl text-foreground glow-soft">{group.name}</div>
-                            <div className="mt-0.5 text-sm text-muted-foreground">{group.locationSummary}</div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-3 pt-0.5">
-                            <div className="hidden gap-3 sm:flex">
-                              <Metric label="Available" value={group.counts.available} compact />
-                              <Metric label="Assigned" value={group.counts.assigned} compact />
-                              <Metric label="Traveling" value={group.counts.traveling} compact />
-                              {group.counts.damaged > 0 && <Metric label="Damaged" value={group.counts.damaged} compact />}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="font-display text-xl text-foreground glow-soft">{group.name}</div>
+                          <div className="flex shrink-0 items-center gap-3">
+                            <div className="hidden text-right sm:block">
+                              <div className="font-display text-lg text-foreground">{group.totalUnits}</div>
+                              <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">{group.locationSummary}</div>
                             </div>
                             {isExpanded ? (
                               <ChevronUp size={16} className="text-primary/60" />
