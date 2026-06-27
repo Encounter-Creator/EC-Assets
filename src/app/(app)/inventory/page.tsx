@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ExternalLink, History, RefreshCcw, Search } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, History, RefreshCcw, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -160,17 +160,24 @@ export default function InventoryPage() {
   );
 
   const selectedGroup = useMemo(
-    () => requestedGroup ?? groupedAssets.find((group) => group.key === selectedGroupKey) ?? groupedAssets[0] ?? null,
+    () => requestedGroup ?? groupedAssets.find((group) => group.key === selectedGroupKey) ?? null,
     [groupedAssets, requestedGroup, selectedGroupKey],
   );
   const selectedAsset = useMemo(
     () =>
       (requestedAssetId ? selectedGroup?.items.find((asset) => asset.id === requestedAssetId) : null) ??
       selectedGroup?.items.find((asset) => asset.id === selectedAssetId) ??
-      selectedGroup?.items[0] ??
       null,
     [requestedAssetId, selectedAssetId, selectedGroup],
   );
+
+  // Auto-expand the group when navigating via URL
+  useEffect(() => {
+    if (requestedGroup && selectedGroupKey !== requestedGroup.key) {
+      setSelectedGroupKey(requestedGroup.key);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedGroup?.key]);
 
   useEffect(() => {
     if (!selectedAsset) return;
@@ -405,210 +412,193 @@ export default function InventoryPage() {
           </div>
         </section>
 
-        <section className="grid gap-4 items-start xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-          <div className="app-panel h-fit self-start overflow-hidden">
+        <section>
+          <div className="app-panel overflow-hidden">
             <div className="border-b border-primary/12 px-5 py-4">
               <div className="app-kicker">Grouped items</div>
               <div className="mt-2 text-sm text-muted-foreground">
-                {groupedAssets.length} grouped item{groupedAssets.length === 1 ? "" : "s"} across {availableLocations.length} locations
+                {groupedAssets.length} group{groupedAssets.length === 1 ? "" : "s"} · {filteredAssets.length} assets · {availableLocations.length} location{availableLocations.length === 1 ? "" : "s"}
               </div>
             </div>
 
-            <div className="space-y-3 p-4">
+            <div className="divide-y divide-primary/8">
               {groupedAssets.length === 0 ? (
-                <div className="rounded-[1.2rem] border border-dashed border-primary/14 px-4 py-10 text-center text-sm text-muted-foreground">
+                <div className="px-4 py-10 text-center text-sm text-muted-foreground">
                   No assets matched the current filters.
                 </div>
               ) : (
-                groupedAssets.map((group) => (
-                  <button
-                    key={group.key}
-                    type="button"
-                    onClick={() => {
-                      setSelectedGroupKey(group.key);
-                      replaceInventoryRoute(group.items[0]?.id ?? null);
-                    }}
-                    className={cn(
-                      "matrix-dashboard-bubble w-full p-4 text-left transition-transform hover:-translate-y-0.5",
-                      selectedGroup?.key === group.key && "border-primary/34",
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-display text-xl text-foreground glow-soft">{group.name}</div>
-                        <div className="mt-1 text-sm text-muted-foreground">{group.locationSummary}</div>
-                      </div>
-                      <ExternalLink size={15} className="mt-1 shrink-0 text-primary/70" />
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      <Metric label="Available" value={group.counts.available} />
-                      <Metric label="Assigned" value={group.counts.assigned} />
-                      <Metric label="Traveling" value={group.counts.traveling} />
-                      <Metric label="Damaged" value={group.counts.damaged} />
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="app-panel h-fit self-start overflow-hidden">
-            <div className="border-b border-primary/12 px-5 py-4">
-              <div className="app-kicker">Unit drill-in</div>
-              <div className="mt-2 font-display text-2xl text-foreground glow-soft">
-                {selectedGroup ? selectedGroup.name : "Select a grouped item"}
-              </div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                {selectedGroup ? "Select a physical unit to inspect details and actions." : "Choose a group to inspect physical units."}
-              </div>
-            </div>
-
-            <div className="space-y-4 p-4">
-              {!selectedGroup ? (
-                <div className="rounded-[1.2rem] border border-dashed border-primary/14 px-4 py-10 text-center text-sm text-muted-foreground">
-                  No group selected.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {selectedGroup.items.map((asset) => {
-                    const normalizedStatus = normalizeAssetStatus(asset.status);
-                    const selected = selectedAsset?.id === asset.id;
-
-                    return (
+                groupedAssets.map((group) => {
+                  const isExpanded = selectedGroupKey === group.key;
+                  return (
+                    <div key={group.key}>
+                      {/* Group header — click to expand/collapse */}
                       <button
-                        key={asset.id}
                         type="button"
-                        onClick={() => {
-                          setSelectedAssetId(asset.id);
-                          replaceInventoryRoute(asset.id);
-                        }}
-                        className={cn("w-full rounded-[1.2rem] border bg-card/45 p-4 text-left transition-colors", selected ? "border-primary/26" : "border-primary/12")}
+                        onClick={() => setSelectedGroupKey(isExpanded ? null : group.key)}
+                        className="w-full px-5 py-4 text-left transition-colors hover:bg-primary/4"
                       >
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="font-mono text-sm uppercase tracking-[0.14em] text-primary">{asset.tag}</div>
-                            <div className="mt-1 font-display text-lg text-foreground">{asset.name}</div>
-                            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                              <span>Serial: {asset.serial}</span>
-                              <span>Location: {asset.location}</span>
-                              <span>Department: {asset.department}</span>
-                              <span>Holder: {asset.holder}</span>
-                            </div>
+                            <div className="font-display text-xl text-foreground glow-soft">{group.name}</div>
+                            <div className="mt-0.5 text-sm text-muted-foreground">{group.locationSummary}</div>
                           </div>
-
-                          <span
-                            className={cn(
-                              "inline-flex w-fit rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
-                              getStatusBadgeClass(normalizedStatus),
+                          <div className="flex shrink-0 items-center gap-3 pt-0.5">
+                            <div className="hidden gap-3 sm:flex">
+                              <Metric label="Available" value={group.counts.available} compact />
+                              <Metric label="Assigned" value={group.counts.assigned} compact />
+                              <Metric label="Traveling" value={group.counts.traveling} compact />
+                              {group.counts.damaged > 0 && <Metric label="Damaged" value={group.counts.damaged} compact />}
+                            </div>
+                            {isExpanded ? (
+                              <ChevronUp size={16} className="text-primary/60" />
+                            ) : (
+                              <ChevronDown size={16} className="text-primary/60" />
                             )}
-                          >
-                            {getAssetStatusLabel(normalizedStatus)}
-                          </span>
+                          </div>
                         </div>
                       </button>
-                    );
-                  })}
-                </div>
-              )}
 
-              {selectedAsset && (
-                <div className="rounded-[1.25rem] border border-primary/12 bg-card/45 p-4 sm:p-5">
-                  <div className="app-kicker">Asset detail</div>
-                  <div className="mt-2 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="font-display text-2xl text-foreground glow-soft">{selectedAsset.name}</div>
-                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                        <span>Tag: {selectedAsset.tag}</span>
-                        <span>Location: {selectedAsset.location}</span>
-                        <span>Holder: {selectedAsset.holder}</span>
-                      </div>
-                    </div>
-                    <span
-                      className={cn(
-                        "inline-flex w-fit rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
-                        getStatusBadgeClass(selectedAsset.status),
-                      )}
-                    >
-                      {getAssetStatusLabel(selectedAsset.status)}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                    <div className="rounded-[1rem] border border-primary/12 bg-card/35 p-4">
-                      <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Allowed field edits</div>
-                      {canEditInventoryAsset ? (
-                        <div className="mt-3 space-y-3">
-                          <FormField label="Name" value={editName} onChange={setEditName} />
-                          <FormField label="Tag" value={editTag} onChange={setEditTag} />
-                          <SelectField
-                            label="Department / Team"
-                            value={editDepartmentId}
-                            onChange={setEditDepartmentId}
-                            options={[
-                              { label: "No department", value: "" },
-                              ...departmentOptions.map((department) => ({ label: department.name, value: department.id })),
-                            ]}
-                          />
-                          <div className="text-sm text-muted-foreground">Serial number stays read-only.</div>
-                          {saveFeedback && (
-                            <div className={cn(
-                              "rounded-[0.95rem] border px-3 py-3 text-sm",
-                              saveFeedback.tone === "success" ? "border-primary/20 bg-primary/8 text-primary" : "border-destructive/20 bg-destructive/8 text-destructive",
-                            )}>
-                              {saveFeedback.message}
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => void saveAssetEdits()}
-                            disabled={savingAssetEdit}
-                            className="matrix-button inline-flex h-11 w-full items-center justify-center rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.12em] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {savingAssetEdit ? "Saving..." : "Save Changes"}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                          <div>Name</div>
-                          <div>Tag</div>
-                          <div>Department / Team</div>
-                          <div>Serial number stays read-only.</div>
-                          <div className="pt-2 text-primary/80">Only admin and asset-manager roles can save changes.</div>
+                      {/* Expanded: individual asset line items */}
+                      {isExpanded && (
+                        <div className="border-t border-primary/8 bg-background/30 px-4 pb-3 pt-2 space-y-1.5">
+                          {group.items.map((asset) => {
+                            const normalizedStatus = normalizeAssetStatus(asset.status);
+                            return (
+                              <button
+                                key={asset.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedAssetId(asset.id);
+                                  replaceInventoryRoute(asset.id);
+                                }}
+                                className="w-full flex items-center justify-between gap-3 rounded-[1rem] border border-primary/10 bg-card/40 px-4 py-3 text-left transition-colors hover:border-primary/24 hover:bg-card/60"
+                              >
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary">{asset.tag}</span>
+                                    <span className="text-sm text-foreground truncate">{asset.name}</span>
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                                    <span>{asset.location}</span>
+                                    {asset.holder && <span>· {asset.holder}</span>}
+                                    {asset.serial && <span>· {asset.serial}</span>}
+                                  </div>
+                                </div>
+                                <span className={cn("shrink-0 inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]", getStatusBadgeClass(normalizedStatus))}>
+                                  {getAssetStatusLabel(normalizedStatus)}
+                                </span>
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
-
-                    <div className="rounded-[1rem] border border-primary/12 bg-card/35 p-4">
-                      <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">
-                        <History size={13} />
-                        Recent history
-                      </div>
-                      <div className="mt-3 space-y-2">
-                        {historyLoading ? (
-                          <div className="text-sm text-muted-foreground">Loading history...</div>
-                        ) : historyRows.length === 0 ? (
-                          <div className="text-sm text-muted-foreground">No recent history found.</div>
-                        ) : (
-                          historyRows.map((row) => (
-                            <div key={row.id} className="rounded-[0.95rem] border border-primary/12 bg-card/40 px-3 py-3">
-                              <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.14em] text-primary/78">
-                                <span>{row.action.replace(/_/g, " ")}</span>
-                                <span className="text-muted-foreground">{row.createdAt}</span>
-                              </div>
-                              <div className="mt-2 text-sm text-foreground">{row.note}</div>
-                              <div className="mt-1 text-xs text-muted-foreground">{row.performedBy}</div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })
               )}
             </div>
           </div>
         </section>
+
+        {/* Asset profile sheet */}
+        {selectedAsset && (
+          <div className="fixed inset-0 z-50 flex justify-end">
+            <div
+              className="absolute inset-0 bg-background/60 backdrop-blur-sm"
+              onClick={() => { setSelectedAssetId(null); replaceInventoryRoute(null); }}
+            />
+            <div className="relative z-10 flex h-full w-full max-w-lg flex-col overflow-y-auto border-l border-primary/14 bg-background shadow-[var(--shadow-strong)]">
+              {/* Sheet header */}
+              <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-primary/12 bg-background/95 px-6 py-5 backdrop-blur-sm">
+                <div className="min-w-0">
+                  <div className="app-kicker">Asset profile</div>
+                  <div className="mt-1 font-display text-2xl text-foreground glow-soft truncate">{selectedAsset.name}</div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 text-sm text-muted-foreground">
+                    <span>Tag: {selectedAsset.tag}</span>
+                    <span>· {selectedAsset.location}</span>
+                    {selectedAsset.holder && <span>· {selectedAsset.holder}</span>}
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedAssetId(null); replaceInventoryRoute(null); }}
+                    className="rounded-full border border-primary/18 bg-card/55 p-2 text-muted-foreground transition-colors hover:bg-primary/8 hover:text-primary"
+                  >
+                    <X size={16} />
+                  </button>
+                  <span className={cn("inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]", getStatusBadgeClass(selectedAsset.status))}>
+                    {getAssetStatusLabel(selectedAsset.status)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-5 p-6">
+                {/* Edit form */}
+                <div className="rounded-[1.15rem] border border-primary/12 bg-card/45 p-4">
+                  <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Field edits</div>
+                  {canEditInventoryAsset ? (
+                    <div className="mt-3 space-y-3">
+                      <FormField label="Name" value={editName} onChange={setEditName} />
+                      <FormField label="Tag" value={editTag} onChange={setEditTag} />
+                      <SelectField
+                        label="Department / Team"
+                        value={editDepartmentId}
+                        onChange={setEditDepartmentId}
+                        options={[
+                          { label: "No department", value: "" },
+                          ...departmentOptions.map((department) => ({ label: department.name, value: department.id })),
+                        ]}
+                      />
+                      <div className="text-xs text-muted-foreground">Serial number is read-only.</div>
+                      {saveFeedback && (
+                        <div className={cn("rounded-[0.95rem] border px-3 py-3 text-sm", saveFeedback.tone === "success" ? "border-primary/20 bg-primary/8 text-primary" : "border-destructive/20 bg-destructive/8 text-destructive")}>
+                          {saveFeedback.message}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void saveAssetEdits()}
+                        disabled={savingAssetEdit}
+                        className="matrix-button inline-flex h-11 w-full items-center justify-center rounded-[1rem] px-4 text-sm font-semibold uppercase tracking-[0.12em] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {savingAssetEdit ? "Saving..." : "Save Changes"}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 text-sm text-primary/70">Only admin and asset-manager roles can edit assets.</div>
+                  )}
+                </div>
+
+                {/* History */}
+                <div className="rounded-[1.15rem] border border-primary/12 bg-card/45 p-4">
+                  <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">
+                    <History size={13} />
+                    Recent history
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {historyLoading ? (
+                      <div className="text-sm text-muted-foreground">Loading history...</div>
+                    ) : historyRows.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">No history found.</div>
+                    ) : (
+                      historyRows.map((row) => (
+                        <div key={row.id} className="rounded-[0.95rem] border border-primary/12 bg-card/40 px-3 py-3">
+                          <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.14em] text-primary/78">
+                            <span>{row.action.replace(/_/g, " ")}</span>
+                            <span className="text-muted-foreground">{row.createdAt}</span>
+                          </div>
+                          <div className="mt-2 text-sm text-foreground">{row.note}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">{row.performedBy}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </SectionShell>
   );
@@ -699,7 +689,15 @@ function SelectField({
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({ label, value, compact }: { label: string; value: number; compact?: boolean }) {
+  if (compact) {
+    return (
+      <div className="text-right">
+        <div className="font-display text-base text-foreground">{value}</div>
+        <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
+      </div>
+    );
+  }
   return (
     <div className="rounded-[1rem] border border-primary/12 bg-card/40 px-3 py-3">
       <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{label}</div>

@@ -74,6 +74,18 @@ export type SundayKitDeploymentItemRecord = {
   return_status: "Pending" | "Available" | "Damaged";
 };
 
+export type KitMemberRecord = {
+  id: string;
+  asset_id: string;
+  sort_order: number;
+  asset_tag: string;
+  asset_name: string;
+  asset_serial: string | null;
+  asset_status: string;
+  asset_location: string | null;
+  asset_department: string | null;
+};
+
 export type CheckOperationsWorkspaceData = {
   signOutAssets: StandardAssetRecord[];
   signInAssets: StandardAssetRecord[];
@@ -432,6 +444,73 @@ async function loadSundayKitsDirect(supabase: SupabaseClient) {
     active: Boolean(row.active),
     item_count: row.item_count ?? 0,
   }));
+}
+
+export async function loadKitMembers(
+  supabase: SupabaseClient,
+  kitId: string,
+): Promise<{ members: KitMemberRecord[]; source: "live" | "fallback"; warnings: string[] }> {
+  try {
+    const { data: memberRows, error: memberError } = await supabase
+      .from("kit_members")
+      .select("id, asset_id, sort_order")
+      .eq("kit_id", kitId)
+      .order("sort_order");
+
+    if (memberError) throw memberError;
+
+    const rows = (memberRows ?? []) as Array<{ id: string; asset_id: string | null; sort_order: number }>;
+    const validRows = rows.filter((r) => r.asset_id);
+    const assetIds = [...new Set(validRows.map((r) => r.asset_id as string))];
+
+    if (assetIds.length === 0) {
+      return { members: [], source: "live", warnings: [] };
+    }
+
+    const { data: assetRows, error: assetError } = await supabase
+      .from("assets")
+      .select("id, code, name, serial_number, status, current_location_id, department_id")
+      .in("id", assetIds);
+
+    if (assetError) throw assetError;
+
+    const assetData = (assetRows ?? []) as Array<{
+      id: string;
+      code: string | null;
+      name: string | null;
+      serial_number: string | null;
+      status: string | null;
+      current_location_id: string | null;
+      department_id: string | null;
+    }>;
+
+    const locationIds = [...new Set(assetData.map((a) => a.current_location_id).filter(Boolean))] as string[];
+    const departmentIds = [...new Set(assetData.map((a) => a.department_id).filter(Boolean))] as string[];
+    const maps = await loadReferenceMaps(supabase, locationIds, departmentIds, []);
+    const assetMap = new Map(assetData.map((a) => [a.id, a]));
+
+    return {
+      members: validRows.map((r) => {
+        const asset = assetMap.get(r.asset_id as string);
+        return {
+          id: r.id,
+          asset_id: r.asset_id as string,
+          sort_order: r.sort_order,
+          asset_tag: asset?.code ?? "No tag",
+          asset_name: asset?.name ?? "Unnamed asset",
+          asset_serial: asset?.serial_number ?? null,
+          asset_status: asset?.status ?? "unknown",
+          asset_location: asset?.current_location_id ? maps.locations[asset.current_location_id] ?? null : null,
+          asset_department: asset?.department_id ? maps.departments[asset.department_id] ?? null : null,
+        };
+      }),
+      source: "live",
+      warnings: [],
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Kit members could not be loaded.";
+    return { members: [], source: "fallback", warnings: [message] };
+  }
 }
 
 export async function loadSundayKitDeploymentItems(

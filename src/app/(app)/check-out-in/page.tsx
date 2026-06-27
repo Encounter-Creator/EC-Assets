@@ -1,7 +1,7 @@
 "use client";
 
-import { AlertTriangle, ArrowRightLeft, Boxes, CheckCircle2, QrCode, RefreshCcw, RotateCcw, ScanLine, ShieldCheck, UserCheck } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, ArrowRightLeft, Boxes, CheckCircle2, QrCode, RefreshCcw, RotateCcw, ScanLine, Search, ShieldCheck, UserCheck } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/contexts/auth-context";
@@ -10,6 +10,7 @@ import {
   deploySundayKit,
   getFallbackCheckOperationsWorkspace,
   loadCheckOperationsWorkspace,
+  loadKitMembers,
   loadSundayKitDeploymentItems,
   resolveOperationalAssetsByCodes,
   returnSundayKitDeployment,
@@ -20,6 +21,7 @@ import {
   runStandardSignIn,
   runStandardSignOut,
   type CheckOperationsWorkspaceData,
+  type KitMemberRecord,
   type SundayKitDeploymentItemRecord,
   type ReturnRequestMonitorRecord,
   type SundayKitDeploymentRecord,
@@ -151,6 +153,12 @@ export default function CheckOutInPage() {
   const [sundayDeploymentItemWarnings, setSundayDeploymentItemWarnings] = useState<string[]>([]);
   const [loadingSundayDeploymentItems, setLoadingSundayDeploymentItems] = useState(false);
   const [sundayReturnOutcomes, setSundayReturnOutcomes] = useState<Record<string, "Available" | "Damaged">>({});
+  const [kitMembers, setKitMembers] = useState<KitMemberRecord[]>([]);
+  const [kitMembersLoading, setKitMembersLoading] = useState(false);
+  const [kitMembersSource, setKitMembersSource] = useState<"live" | "fallback">("fallback");
+  const [kitMemberWarnings, setKitMemberWarnings] = useState<string[]>([]);
+  const [kitItemOverrides, setKitItemOverrides] = useState<Record<string, string>>({});
+  const [selectedKitMemberIds, setSelectedKitMemberIds] = useState<string[]>([]);
   const [operationNote, setOperationNote] = useState("");
   const [permanentNote, setPermanentNote] = useState("");
   const [stationedNote, setStationedNote] = useState("");
@@ -331,6 +339,14 @@ export default function CheckOutInPage() {
     () => sundayDeploymentItems.filter((item) => item.return_status !== "Pending"),
     [sundayDeploymentItems],
   );
+  const kitDeployAssetIds = useMemo(
+    () =>
+      kitMembers
+        .filter((m) => selectedKitMemberIds.includes(m.id))
+        .map((m) => kitItemOverrides[m.id] ?? m.asset_id),
+    [kitMembers, selectedKitMemberIds, kitItemOverrides],
+  );
+
   const selectedSundayItemResolutions = useMemo(
     () =>
       pendingSundayDeploymentItems
@@ -416,6 +432,62 @@ export default function CheckOutInPage() {
       cancelled = true;
     };
   }, [isConfigured, resolvedSundayDeploymentId, sundayKitsMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMembers = async () => {
+      if (sundayKitsMode !== "deploy" || !resolvedSundayKitId || !isConfigured) {
+        if (!cancelled) {
+          setKitMembers([]);
+          setKitItemOverrides({});
+          setSelectedKitMemberIds([]);
+          setKitMembersLoading(false);
+        }
+        return;
+      }
+
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        if (!cancelled) {
+          setKitMembers([]);
+          setKitMembersLoading(false);
+        }
+        return;
+      }
+
+      if (!cancelled) setKitMembersLoading(true);
+
+      try {
+        const result = await loadKitMembers(supabase, resolvedSundayKitId);
+        if (!cancelled) {
+          setKitMembers(result.members);
+          setKitMembersSource(result.source);
+          setKitMemberWarnings(result.warnings);
+          setSelectedKitMemberIds(result.members.map((m) => m.id));
+          setKitItemOverrides({});
+        }
+      } catch {
+        if (!cancelled) {
+          setKitMembers([]);
+          setKitMembersSource("fallback");
+        }
+      } finally {
+        if (!cancelled) setKitMembersLoading(false);
+      }
+    };
+
+    void loadMembers();
+    return () => { cancelled = true; };
+  }, [resolvedSundayKitId, sundayKitsMode, isConfigured]);
+
+  const toggleKitMember = useCallback((memberId: string) => {
+    setSelectedKitMemberIds((prev) => prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId]);
+  }, []);
+
+  const overrideKitItem = useCallback((memberId: string, assetId: string) => {
+    setKitItemOverrides((prev) => ({ ...prev, [memberId]: assetId }));
+  }, []);
 
   const toggleAsset = (assetId: string, mode: "sign_out" | "sign_in") => {
     const setter = mode === "sign_out" ? setSelectedSignOutAssetIds : setSelectedSignInAssetIds;
@@ -877,20 +949,38 @@ export default function CheckOutInPage() {
           return;
         }
 
-        const { error } = await deploySundayKit(supabase, {
-          kitId: selectedSundayKit.id,
-          kitName: selectedSundayKit.name,
-          itemCount: selectedSundayKit.item_count,
-          responsibleUserId: resolvedSundayKitRecipientId,
-          locationId: resolvedSundayKitLocationId,
-          note: sundayKitsNote,
-        });
-        if (error) throw error;
-
-        setFeedback({
-          tone: "success",
-          message: `${selectedSundayKit.name} deployed into the live Sunday Kits workflow.`,
-        });
+        if (kitMembers.length > 0 && kitMembersSource === "live") {
+          if (kitDeployAssetIds.length === 0) {
+            setFeedback({ tone: "error", message: "Select at least one kit item to sign out." });
+            return;
+          }
+          const { error } = await runStandardSignOut(supabase, {
+            assetIds: kitDeployAssetIds,
+            holderId: resolvedSundayKitRecipientId,
+            note: `Kit: ${selectedSundayKit.name}${sundayKitsNote ? " — " + sundayKitsNote : ""}`,
+          });
+          if (error) throw error;
+          setFeedback({
+            tone: "success",
+            message: `${kitDeployAssetIds.length} item${kitDeployAssetIds.length === 1 ? "" : "s"} signed out from ${selectedSundayKit.name}.`,
+          });
+          setSelectedKitMemberIds(kitMembers.map((m) => m.id));
+          setKitItemOverrides({});
+        } else {
+          const { error } = await deploySundayKit(supabase, {
+            kitId: selectedSundayKit.id,
+            kitName: selectedSundayKit.name,
+            itemCount: selectedSundayKit.item_count,
+            responsibleUserId: resolvedSundayKitRecipientId,
+            locationId: resolvedSundayKitLocationId,
+            note: sundayKitsNote,
+          });
+          if (error) throw error;
+          setFeedback({
+            tone: "success",
+            message: `${selectedSundayKit.name} deployed into the live Sunday Kits workflow.`,
+          });
+        }
       } else {
         if (!resolvedSundayDeploymentId) {
           setFeedback({ tone: "error", message: "Choose a deployment first." });
@@ -1510,7 +1600,17 @@ export default function CheckOutInPage() {
                   <div className="space-y-4">
                     {sundayKitsMode === "deploy" ? (
                       <>
-                        <SundayKitSummaryCard kit={selectedSundayKit} />
+                        <KitDeployMemberList
+                          kit={selectedSundayKit}
+                          members={kitMembers}
+                          loading={kitMembersLoading}
+                          warnings={kitMemberWarnings}
+                          selectedIds={selectedKitMemberIds}
+                          overrides={kitItemOverrides}
+                          onToggle={toggleKitMember}
+                          onOverride={overrideKitItem}
+                          signOutPool={workspace.signOutAssets}
+                        />
                         <SelectField
                           label="Responsible user"
                           value={resolvedSundayKitRecipientId}
@@ -1644,7 +1744,7 @@ export default function CheckOutInPage() {
                       disabled={
                         busy !== null ||
                         (sundayKitsMode === "deploy"
-                          ? !selectedSundayKit || !resolvedSundayKitRecipientId || !resolvedSundayKitLocationId
+                          ? !selectedSundayKit || !resolvedSundayKitRecipientId || !resolvedSundayKitLocationId || (kitMembers.length > 0 && kitMembersSource === "live" && kitDeployAssetIds.length === 0)
                           : !resolvedSundayDeploymentId || (sundayDeploymentItemsSource === "live" && selectedSundayItemResolutions.length === 0))
                       }
                       className="matrix-button inline-flex h-12 w-full items-center justify-center gap-2 rounded-[1.15rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
@@ -1653,7 +1753,9 @@ export default function CheckOutInPage() {
                       {busy === "sunday_kits"
                         ? "Running Sunday Kits Operation"
                         : sundayKitsMode === "deploy"
-                          ? "Deploy Sunday Kit"
+                          ? kitMembers.length > 0 && kitMembersSource === "live"
+                            ? `Sign Out Kit Items${kitDeployAssetIds.length > 0 ? ` (${kitDeployAssetIds.length})` : ""}`
+                            : "Deploy Sunday Kit"
                           : "Record Sunday Kit Return"}
                     </button>
                     <div className="rounded-[1rem] border border-sky-500/18 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
@@ -1879,6 +1981,18 @@ function AssetSelectionList({
   emptyTitle: string;
   emptyBody: string;
 }) {
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return assets;
+    const q = query.toLowerCase();
+    return assets.filter((asset) =>
+      [asset.name, asset.tag, asset.serial_number, asset.current_location, asset.department, asset.holder].some(
+        (v) => v?.toLowerCase().includes(q),
+      ),
+    );
+  }, [assets, query]);
+
   if (assets.length === 0) {
     return (
       <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-10 text-center">
@@ -1889,39 +2003,183 @@ function AssetSelectionList({
   }
 
   return (
-    <div className="grid gap-3">
-      {assets.map((asset) => {
-        const selected = selectedIds.includes(asset.id);
-        return (
-          <button
-            key={asset.id}
-            type="button"
-            onClick={() => onToggle(asset.id)}
-            className={cn("matrix-dashboard-bubble p-4 text-left", selected && "border-primary/34")}
-          >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <div className="font-mono text-sm uppercase tracking-[0.14em] text-primary">{asset.tag}</div>
-                <div className="mt-1 font-display text-xl text-foreground glow-soft">{asset.name}</div>
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                  <span>{asset.serial_number}</span>
-                  <span>{asset.current_location ?? "No location"}</span>
-                  <span>{asset.department ?? "No department"}</span>
-                  {asset.holder && <span>{asset.holder}</span>}
+    <div className="space-y-3">
+      <div className="matrix-field flex h-10 items-center gap-2 rounded-[1.15rem] px-3">
+        <Search size={14} className="shrink-0 text-primary/60" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={`Search ${assets.length} asset${assets.length === 1 ? "" : "s"}…`}
+          className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+        />
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="py-6 text-center text-sm text-muted-foreground">No assets matched the search.</div>
+      ) : (
+        <div className="grid gap-3">
+          {filtered.map((asset) => {
+            const selected = selectedIds.includes(asset.id);
+            return (
+              <button
+                key={asset.id}
+                type="button"
+                onClick={() => onToggle(asset.id)}
+                className={cn("matrix-dashboard-bubble p-4 text-left", selected && "border-primary/34")}
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="font-mono text-sm uppercase tracking-[0.14em] text-primary">{asset.tag}</div>
+                    <div className="mt-1 font-display text-xl text-foreground glow-soft">{asset.name}</div>
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                      <span>{asset.serial_number}</span>
+                      <span>{asset.current_location ?? "No location"}</span>
+                      <span>{asset.department ?? "No department"}</span>
+                      {asset.holder && <span>{asset.holder}</span>}
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
+                      selected ? "border-primary/26 bg-primary/12 text-primary" : "border-primary/12 text-muted-foreground",
+                    )}
+                  >
+                    {selected ? "Selected" : asset.state}
+                  </span>
                 </div>
-              </div>
-              <span
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KitDeployMemberList({
+  kit,
+  members,
+  loading,
+  warnings,
+  selectedIds,
+  overrides,
+  onToggle,
+  onOverride,
+  signOutPool,
+}: {
+  kit: SundayKitRecord | null;
+  members: KitMemberRecord[];
+  loading: boolean;
+  warnings: string[];
+  selectedIds: string[];
+  overrides: Record<string, string>;
+  onToggle: (memberId: string) => void;
+  onOverride: (memberId: string, assetId: string) => void;
+  signOutPool: StandardAssetRecord[];
+}) {
+  return (
+    <div className="rounded-[1.2rem] border border-primary/12 bg-card/45 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-primary/72">Kit items</div>
+        {kit && <div className="text-sm text-foreground font-display glow-soft">{kit.name}</div>}
+      </div>
+
+      {warnings.length > 0 && (
+        <div className="mt-3 rounded-[1rem] border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-xs text-amber-100/85">
+          {warnings.map((w) => <div key={w}>{w}</div>)}
+        </div>
+      )}
+
+      <div className="mt-3 space-y-2">
+        {loading ? (
+          <div className="py-4 text-center text-sm text-muted-foreground">Loading kit items…</div>
+        ) : !kit ? (
+          <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-8 text-center text-sm text-muted-foreground">
+            No kit selected.
+          </div>
+        ) : members.length === 0 ? (
+          <div className="rounded-[1rem] border border-dashed border-primary/14 px-4 py-8 text-center text-sm text-muted-foreground">
+            {kit.item_count} item{kit.item_count === 1 ? "" : "s"} in this kit — sign-out will deploy all items via the standard kit flow.
+          </div>
+        ) : (
+          members.map((member) => {
+            const selected = selectedIds.includes(member.id);
+            const override = overrides[member.id];
+            const effectiveAssetId = override ?? member.asset_id;
+            const overrideAsset = override ? signOutPool.find((a) => a.id === override) : null;
+
+            const otherEffectiveIds = new Set(
+              members.filter((m) => m.id !== member.id && selectedIds.includes(m.id)).map((m) => overrides[m.id] ?? m.asset_id),
+            );
+            const availableSwaps = signOutPool.filter((a) => a.id !== effectiveAssetId && !otherEffectiveIds.has(a.id));
+
+            return (
+              <div
+                key={member.id}
                 className={cn(
-                  "inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
-                  selected ? "border-primary/26 bg-primary/12 text-primary" : "border-primary/12 text-muted-foreground",
+                  "rounded-[1rem] border p-3 transition-colors",
+                  selected ? "border-primary/18 bg-card/40" : "border-primary/8 bg-card/20 opacity-50",
                 )}
               >
-                {selected ? "Selected" : asset.state}
-              </span>
-            </div>
-          </button>
-        );
-      })}
+                <div className="flex items-start gap-3">
+                  <button
+                    type="button"
+                    onClick={() => onToggle(member.id)}
+                    className={cn(
+                      "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors",
+                      selected ? "border-primary/40 bg-primary/20 text-primary" : "border-primary/20 text-transparent",
+                    )}
+                    title={selected ? "Deselect item" : "Select item"}
+                  >
+                    <CheckCircle2 size={12} />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs uppercase tracking-[0.14em] text-primary">
+                        {overrideAsset ? overrideAsset.tag : member.asset_tag}
+                      </span>
+                      {override && (
+                        <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-300">
+                          Swapped
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 text-sm text-foreground">{overrideAsset ? overrideAsset.name : member.asset_name}</div>
+                    {member.asset_serial && !override && (
+                      <div className="mt-0.5 text-xs text-muted-foreground">{member.asset_serial}</div>
+                    )}
+                  </div>
+                </div>
+
+                {selected && availableSwaps.length > 0 && (
+                  <div className="mt-2 pl-8">
+                    <select
+                      value={override ?? ""}
+                      onChange={(e) => onOverride(member.id, e.target.value)}
+                      className="matrix-field h-9 w-full rounded-[0.85rem] px-3 text-xs text-foreground outline-none"
+                    >
+                      <option value="" className="bg-[hsl(var(--card))] text-muted-foreground">
+                        — Use kit default ({member.asset_tag}) —
+                      </option>
+                      {availableSwaps.map((asset) => (
+                        <option key={asset.id} value={asset.id} className="bg-[hsl(var(--card))] text-foreground">
+                          {asset.tag} · {asset.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {members.length > 0 && (
+        <div className="mt-2 text-xs text-muted-foreground">
+          {selectedIds.length} of {members.length} item{members.length === 1 ? "" : "s"} selected
+        </div>
+      )}
     </div>
   );
 }
