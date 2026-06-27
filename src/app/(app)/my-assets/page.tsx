@@ -72,6 +72,10 @@ export default function MyAssetsPage() {
     warnings: [],
   }));
   const [loading, setLoading] = useState(true);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  useEffect(() => {
+    if (!loading && !workspaceReady) setWorkspaceReady(true);
+  }, [loading, workspaceReady]);
   const [selectedPendingIds, setSelectedPendingIds] = useState<string[]>([]);
   const [busyPendingIds, setBusyPendingIds] = useState<string[]>([]);
   const [declineReason, setDeclineReason] = useState("");
@@ -449,6 +453,14 @@ export default function MyAssetsPage() {
     }
   };
 
+  if (!workspaceReady) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="font-mono text-sm uppercase tracking-[0.18em] text-primary/40 animate-pulse">Loading</div>
+      </div>
+    );
+  }
+
   return (
     <SectionShell title="My Assets" kicker="Assigned + Pending + Damage">
       {workspace.pendingItems.length > 0 && (
@@ -814,7 +826,7 @@ export default function MyAssetsPage() {
                           </button>
                           <button
                             type="button"
-                            disabled={busy}
+                            disabled={busy || !declineReason.trim()}
                             onClick={() => void handlePendingAction(item, false)}
                             className="inline-flex h-11 items-center justify-center gap-2 rounded-[1rem] border border-destructive/22 bg-card/55 px-4 text-sm font-semibold uppercase tracking-[0.14em] text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
                           >

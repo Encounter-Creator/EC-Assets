@@ -103,6 +103,10 @@ export default function CheckOutInPage() {
     warnings: [],
   }));
   const [loading, setLoading] = useState(true);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  useEffect(() => {
+    if (!loading && !workspaceReady) setWorkspaceReady(true);
+  }, [loading, workspaceReady]);
   const [activeTab, setActiveTab] = useState<OpsTab>(requestedTab ?? "standard");
   const [standardMode, setStandardMode] = useState<"sign_out" | "sign_in">(requestedTab === "standard" && requestedMode === "sign_in" ? "sign_in" : "sign_out");
   const [permanentMode, setPermanentMode] = useState<"direct_issue" | "reassign">(requestedTab === "permanent" && requestedMode === "reassign" ? "reassign" : "direct_issue");
@@ -955,6 +959,14 @@ export default function CheckOutInPage() {
           <h1 className="app-title mt-2">This operational workspace is reserved for admin and asset-manager roles.</h1>
         </div>
       </SectionShell>
+    );
+  }
+
+  if (!workspaceReady) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="font-mono text-sm uppercase tracking-[0.18em] text-primary/40 animate-pulse">Loading</div>
+      </div>
     );
   }
 

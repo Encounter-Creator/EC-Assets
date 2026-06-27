@@ -116,7 +116,7 @@ export default function RequestsPage() {
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
   const requestedAssetId = searchParams.get("assetId");
-  const { user, isAdmin, isStaff, isConfigured } = useAuth();
+  const { user, isAdmin, isAssetManager, isStaff, isConfigured } = useAuth();
   const { activeLocationId, selectedLocationName, locations } = useLocationScope();
   const { pushToast } = useToast();
   const activeTab: "asset" | "special" | "returns" | "history" =
@@ -127,6 +127,10 @@ export default function RequestsPage() {
     warnings: [],
   }));
   const [loading, setLoading] = useState(true);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  useEffect(() => {
+    if (!loading && !workspaceReady) setWorkspaceReady(true);
+  }, [loading, workspaceReady]);
   const [assetSearch, setAssetSearch] = useState("");
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [neededDate, setNeededDate] = useState("");
@@ -155,7 +159,7 @@ export default function RequestsPage() {
     });
   }, [feedback, pushToast]);
 
-  const canUseRequests = isAdmin || isStaff;
+  const canUseRequests = isAdmin || isAssetManager || isStaff;
   const replaceRequestsRoute = (tab: "asset" | "special" | "returns" | "history", assetId?: string | null) => {
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.set("tab", tab);
@@ -676,6 +680,14 @@ export default function RequestsPage() {
     );
   }
 
+  if (!workspaceReady) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="font-mono text-sm uppercase tracking-[0.18em] text-primary/40 animate-pulse">Loading</div>
+      </div>
+    );
+  }
+
   return (
     <SectionShell title="Requests" kicker="Asset + Special + Returns + History">
       <div className="space-y-4 sm:space-y-6">
@@ -938,7 +950,7 @@ export default function RequestsPage() {
                       type="button"
                       onClick={() => void submitLiveSpecialRequest()}
                       disabled={submittingSpecialRequest || !effectiveSpecialAssetId || !resolvedRequestSourceLocationId}
-                      className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[1rem] border border-primary/18 bg-card/55 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      className="matrix-button mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[1.15rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <ShieldCheck size={15} />
                       {submittingSpecialRequest ? "Submitting Special Request" : `Submit ${specialType}`}
@@ -1022,7 +1034,7 @@ export default function RequestsPage() {
                       type="button"
                       onClick={() => void submitLiveReturnRequest()}
                         disabled={submittingReturnRequest || effectiveSelectedReturnIds.length === 0 || !resolvedPreferredReturnLocationId || !resolvedRequestSourceLocationId}
-                      className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[1rem] border border-primary/18 bg-card/55 px-4 text-sm font-medium text-foreground transition-colors hover:bg-primary/8 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      className="matrix-button inline-flex h-12 w-full items-center justify-center gap-2 rounded-[1.15rem] px-4 text-sm font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <RotateCcw size={15} />
                       {submittingReturnRequest ? "Submitting Return Request" : `Submit Return Request${effectiveSelectedReturnIds.length > 0 ? ` (${effectiveSelectedReturnIds.length})` : ""}`}

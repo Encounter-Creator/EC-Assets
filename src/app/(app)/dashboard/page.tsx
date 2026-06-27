@@ -75,6 +75,10 @@ export default function DashboardPage() {
     warnings: [],
   }));
   const [loading, setLoading] = useState(true);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  useEffect(() => {
+    if (!loading && !workspaceReady) setWorkspaceReady(true);
+  }, [loading, workspaceReady]);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
 
   useEffect(() => {
@@ -162,6 +166,14 @@ export default function DashboardPage() {
       setLoading(false);
     }
   };
+
+  if (!workspaceReady) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="font-mono text-sm uppercase tracking-[0.18em] text-primary/40 animate-pulse">Loading</div>
+      </div>
+    );
+  }
 
   return (
     <SectionShell title="Operations overview" kicker="Dashboard">

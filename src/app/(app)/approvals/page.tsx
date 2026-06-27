@@ -64,6 +64,10 @@ export default function ApprovalsPage() {
     warnings: [],
   }));
   const [loading, setLoading] = useState(true);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  useEffect(() => {
+    if (!loading && !workspaceReady) setWorkspaceReady(true);
+  }, [loading, workspaceReady]);
   const [selectedQueueItemIds, setSelectedQueueItemIds] = useState<string[]>([]);
   const [reviewNotesByItemId, setReviewNotesByItemId] = useState<Record<string, string>>({});
   const [returnLocationByItemId, setReturnLocationByItemId] = useState<Record<string, string>>({});
@@ -461,6 +465,14 @@ export default function ApprovalsPage() {
           <h1 className="app-title mt-2">This workspace is reserved for admin and asset-manager roles.</h1>
         </div>
       </SectionShell>
+    );
+  }
+
+  if (!workspaceReady) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="font-mono text-sm uppercase tracking-[0.18em] text-primary/40 animate-pulse">Loading</div>
+      </div>
     );
   }
 

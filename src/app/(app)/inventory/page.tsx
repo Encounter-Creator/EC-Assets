@@ -32,6 +32,10 @@ export default function InventoryPage() {
     warnings: [],
   }));
   const [loading, setLoading] = useState(true);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  useEffect(() => {
+    if (!loading && !workspaceReady) setWorkspaceReady(true);
+  }, [loading, workspaceReady]);
   const [query, setQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<AssetStatus | "all">("all");
@@ -308,6 +312,14 @@ export default function InventoryPage() {
       setSavingAssetEdit(false);
     }
   };
+
+  if (!workspaceReady) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="font-mono text-sm uppercase tracking-[0.18em] text-primary/40 animate-pulse">Loading</div>
+      </div>
+    );
+  }
 
   return (
     <SectionShell title="Inventory" kicker="Grouped catalog">

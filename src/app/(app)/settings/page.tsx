@@ -78,6 +78,10 @@ export default function SettingsPage() {
     warnings: [],
   }));
   const [loading, setLoading] = useState(true);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  useEffect(() => {
+    if (!loading && !workspaceReady) setWorkspaceReady(true);
+  }, [loading, workspaceReady]);
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
   const [feedback, setFeedback] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(null);
   const [busyAction, setBusyAction] = useState<"profile" | "user" | "location" | "department" | "kit" | "consumable" | "config" | "duplicate" | null>(null);
@@ -1317,7 +1321,7 @@ export default function SettingsPage() {
       return;
     }
 
-    setBusyAction("duplicate");
+    setBusyAction("config");
     try {
       const value = {
         labelMm,
@@ -1487,6 +1491,14 @@ export default function SettingsPage() {
       setBusyAction(null);
     }
   };
+
+  if (!workspaceReady) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="font-mono text-sm uppercase tracking-[0.18em] text-primary/40 animate-pulse">Loading</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(44,84,61,0.2),_transparent_40%),_linear-gradient(180deg,_hsl(var(--background)),_hsl(var(--background)))] text-foreground">

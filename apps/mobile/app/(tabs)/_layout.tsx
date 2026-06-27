@@ -29,7 +29,7 @@ export default function TabsLayout() {
 
   const canUseOperations = isAdmin || isAssetManager;
   const canBrowseInventory = isAdmin || isAssetManager || isStaff;
-  const canMakeRequests = isAdmin || isStaff;
+  const canMakeRequests = isAdmin || isAssetManager || isStaff;
 
   return (
     <Tabs
