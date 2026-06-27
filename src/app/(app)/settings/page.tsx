@@ -2042,7 +2042,7 @@ export default function SettingsPage() {
                         >
                           <div className="text-sm font-medium text-foreground">{entry.name}</div>
                           <div className="mt-1 text-sm text-muted-foreground">
-                            {entry.home_base ?? "Unassigned"} | {entry.item_count} item{entry.item_count === 1 ? "" : "s"} | {entry.active ? "Active" : "Inactive"}
+                            {entry.item_count} item{entry.item_count === 1 ? "" : "s"} · {entry.active ? "Active" : "Inactive"}
                           </div>
                         </button>
                         <button
